@@ -40,11 +40,19 @@ export function loadEnv({
 
   // Hosted platforms (Railway, Render, Fly, Heroku, etc.) inject a PORT env var
   // and expect us to bind to 0.0.0.0. We use that as a heuristic to switch the
-  // default bind from loopback → all interfaces. If you really want to override
-  // it locally, set SERVER_BIND explicitly.
+  // default bind from loopback → all interfaces.
+  //
+  // Defensive override: when PORT is set, a SERVER_BIND of 127.0.0.1 / localhost
+  // would make the container unreachable (the platform's edge proxy hits 0.0.0.0
+  // inside the namespace). That's almost certainly a misconfig from copy-pasting
+  // .env.example into Railway/Render Variables, so we ignore it and warn.
   const isHosted = !!process.env.PORT;
   const serverPort = Number(process.env.PORT ?? process.env.SERVER_PORT ?? 4337);
-  const serverBind = process.env.SERVER_BIND ?? (isHosted ? "0.0.0.0" : "127.0.0.1");
+  let serverBind = process.env.SERVER_BIND ?? (isHosted ? "0.0.0.0" : "127.0.0.1");
+  if (isHosted && (serverBind === "127.0.0.1" || serverBind === "localhost" || serverBind === "::1")) {
+    console.warn(`[env] PORT is set (hosted mode) but SERVER_BIND=${serverBind} would make the container unreachable from the edge. Forcing 0.0.0.0. Remove SERVER_BIND from your platform's Variables tab to silence this.`);
+    serverBind = "0.0.0.0";
+  }
 
   return {
     apiKey: process.env.ETHERSCAN_API_KEY ?? "",
