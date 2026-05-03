@@ -46,6 +46,73 @@ The UI has four tabs:
 
 Everything binds to `127.0.0.1` by default — private keys entered in the Rescue tab stay on your machine.
 
+---
+
+## Hosted deployment (Railway / Render / Fly)
+
+The same Node server runs unmodified on any platform that speaks the standard
+`PORT` env convention. When `PORT` is set the server automatically:
+
+- Binds to `0.0.0.0` instead of `127.0.0.1`
+- Disables disk writes (the platform FS is ephemeral; reports stream straight
+  to the browser)
+- Returns an empty History tab
+
+> **Set `AUTH_PASSWORD`.** Without it your URL is open to the internet and
+> anyone can burn your Etherscan API quota. With it, browsers show a native
+> login prompt before serving any page.
+>
+> **Heads up about Rescue.** The Rescue tab handles private keys. On a hosted
+> deployment those keys leave your laptop, traverse TLS to the host, and only
+> there sign + submit to builders. The tool itself doesn't log them, but the
+> threat model is no longer "loopback only". If you only want a public Trace
+> tool, that's fine — just don't use the Rescue tab on the hosted instance.
+
+### Required env vars on any host
+
+| Var | Purpose |
+|---|---|
+| `AUTH_PASSWORD` | Shared password for HTTP Basic auth. **Required.** |
+| `AUTH_USER` | Username (defaults to `admin`). Optional. |
+| `ETHERSCAN_API_KEY` | Optional default; users can paste their own in the UI. |
+| `CHAIN_ID` | Default chain shown in UI (`1` = mainnet). |
+
+### Railway
+
+1. Push this repo to GitHub.
+2. New Project → Deploy from GitHub Repo → pick this one. Railway auto-detects
+   Node and reads `railway.json`.
+3. In the project Variables tab, add `AUTH_PASSWORD` and (optionally)
+   `ETHERSCAN_API_KEY`.
+4. Hit the generated `*.up.railway.app` URL, log in with `admin` + your
+   password.
+
+### Render
+
+1. Push this repo to GitHub.
+2. New → Blueprint → point at the repo. Render reads `render.yaml`.
+3. Set `AUTH_PASSWORD` and `ETHERSCAN_API_KEY` in the dashboard (they're marked
+   `sync: false`).
+4. Open the generated URL, log in.
+
+### Fly.io
+
+```bash
+fly launch --no-deploy        # accepts fly.toml as-is
+fly secrets set AUTH_PASSWORD=hunter2 ETHERSCAN_API_KEY=YOUR_KEY
+fly deploy
+```
+
+### Why not Vercel?
+
+Tried it; doesn't fit. The server is stateful (in-memory job tracking, SSE
+streams), traces can run for many minutes, and rescue submission watches
+inclusion across 100 blocks (~20 min). Vercel's 60–300s function timeout cuts
+both off. Railway/Render/Fly run it as a regular long-lived Node process with
+no surgery needed.
+
+---
+
 ## Quick start (CLI)
 
 If you'd rather run traces headless:

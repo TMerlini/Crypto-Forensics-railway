@@ -38,6 +38,14 @@ export function loadEnv({
     console.warn(`[env] Missing optional env vars: ${warn.join(", ")}. You can provide them in the UI per-request instead.`);
   }
 
+  // Hosted platforms (Railway, Render, Fly, Heroku, etc.) inject a PORT env var
+  // and expect us to bind to 0.0.0.0. We use that as a heuristic to switch the
+  // default bind from loopback → all interfaces. If you really want to override
+  // it locally, set SERVER_BIND explicitly.
+  const isHosted = !!process.env.PORT;
+  const serverPort = Number(process.env.PORT ?? process.env.SERVER_PORT ?? 4337);
+  const serverBind = process.env.SERVER_BIND ?? (isHosted ? "0.0.0.0" : "127.0.0.1");
+
   return {
     apiKey: process.env.ETHERSCAN_API_KEY ?? "",
     chainId: Number(process.env.CHAIN_ID ?? 1),
@@ -49,7 +57,11 @@ export function loadEnv({
     fromTs: process.env.FROM_TIMESTAMP ? Number(process.env.FROM_TIMESTAMP) : null,
     toTs: process.env.TO_TIMESTAMP ? Number(process.env.TO_TIMESTAMP) : null,
     direction: (process.env.DIRECTION ?? "in").toLowerCase(),
-    serverPort: Number(process.env.SERVER_PORT ?? 4337),
-    serverBind: process.env.SERVER_BIND ?? "127.0.0.1",
+    serverPort,
+    serverBind,
+    isHosted,
+    authUser: process.env.AUTH_USER ?? "admin",
+    authPassword: process.env.AUTH_PASSWORD ?? "",
+    disableDisk: String(process.env.DISABLE_DISK ?? (isHosted ? "true" : "false")).toLowerCase() === "true",
   };
 }

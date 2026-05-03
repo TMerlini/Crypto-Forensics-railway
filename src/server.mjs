@@ -19,7 +19,7 @@ import { createServer } from "node:http";
 import { readFileSync, existsSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname, extname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { loadEnv } from "./env.mjs";
 import { runTrace } from "./tracer.mjs";
 import { analyze } from "./report.mjs";
@@ -35,7 +35,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, "..");
 const webDir = join(rootDir, "web");
 const outDir = join(rootDir, "out");
-mkdirSync(outDir, { recursive: true });
+// Skip persistent state on hosted platforms — their FS is ephemeral and the
+// History tab is opt-in via env anyway. Locally we keep the old behaviour.
+if (!env.disableDisk) mkdirSync(outDir, { recursive: true });
 
 // In-memory run state. Each run: { id, state, done, error, aborted, subscribers: Set<res> }
 const runs = new Map();
@@ -60,6 +62,17 @@ const server = createServer(async (req, res) => {
     // CORS: strict — only our own origin. No wildcard, no creds.
     res.setHeader("Access-Control-Allow-Origin", "");
     res.setHeader("Cache-Control", "no-store");
+
+    // Optional shared-password gate. Off when AUTH_PASSWORD is empty (local
+    // dev). When set, every request — including static assets — must carry
+    // a matching `Authorization: Basic` header. Browsers handle the prompt
+    // natively so the UI doesn't need any auth code of its own.
+    if (env.authPassword && !checkBasicAuth(req)) {
+      res.statusCode = 401;
+      res.setHeader("WWW-Authenticate", 'Basic realm="Sweeper Forensics", charset="UTF-8"');
+      res.setHeader("content-type", "text/plain; charset=utf-8");
+      return res.end("Authentication required");
+    }
 
     if (req.method === "GET" && (p === "/" || p === "/index.html")) return sendFile(res, join(webDir, "index.html"));
     if (req.method === "GET" && p.startsWith("/static/")) return sendFile(res, join(webDir, p.slice("/static/".length)));
@@ -110,8 +123,15 @@ const server = createServer(async (req, res) => {
 server.listen(env.serverPort, env.serverBind, () => {
   console.log(`\n  Sweeper Trace UI running at  http://${env.serverBind}:${env.serverPort}\n`);
   console.log(`  Chain: ${env.chainId}   Builders: ${buildersForChain(env.chainId).length}`);
-  console.log(`  Output dir: ${outDir}\n`);
-  console.log(`  ${env.serverBind === "127.0.0.1" ? "Loopback only. Safe for private keys." : "WARNING: bound to " + env.serverBind + " — anyone on your network can hit this server."}\n`);
+  console.log(`  Output dir: ${env.disableDisk ? "(disabled — hosted mode, reports only stream to UI)" : outDir}\n`);
+  if (env.serverBind === "127.0.0.1") {
+    console.log("  Loopback only. Safe for private keys.\n");
+  } else {
+    const authNote = env.authPassword
+      ? `protected by Basic auth (user "${env.authUser}")`
+      : "PUBLIC — set AUTH_PASSWORD to require a login";
+    console.log(`  Bound to ${env.serverBind} — ${authNote}.\n`);
+  }
 });
 
 // -----------------------------------------------------------------------------
@@ -159,7 +179,9 @@ async function startTrace(req, res) {
         },
       });
       const envCtx = { chainId: params.chainId, scamAddress: params.scamAddress, direction: params.direction, maxDepth: params.maxDepth };
-      await writeReports({ state: run.state, env: envCtx, outDir });
+      // Skip persistent reports on hosted (ephemeral FS); the live UI gets
+      // everything via the SSE `report-ready` event below.
+      if (!env.disableDisk) await writeReports({ state: run.state, env: envCtx, outDir });
       const analysis = analyze(run.state, params.scamAddress, params.direction);
       emitProgress(run, { type: "report-ready", analysis, runId: id });
       run.done = true;
@@ -206,7 +228,7 @@ function abortTrace(id, res) {
 }
 
 function listRuns(res) {
-  if (!existsSync(outDir)) return sendJson(res, []);
+  if (env.disableDisk || !existsSync(outDir)) return sendJson(res, []);
   const files = readdirSync(outDir).filter((f) => f.endsWith(".report.md"));
   const runs = files.map((f) => {
     const base = f.replace(".report.md", "");
@@ -222,6 +244,7 @@ function listRuns(res) {
 }
 
 function sendReport(id, res) {
+  if (env.disableDisk) return sendJson(res, { error: "history disabled on this deployment" }, 404);
   const path = join(outDir, `${id}.json`);
   if (!existsSync(path)) return sendJson(res, { error: "not found" }, 404);
   sendFile(res, path);
@@ -365,4 +388,32 @@ async function readJsonBody(req) {
 function clamp(v, min, max) {
   if (!Number.isFinite(v)) return min;
   return Math.max(min, Math.min(max, v));
+}
+
+// Constant-time HTTP Basic auth check. Returns true when the request carries
+// the correct user:pass, false otherwise. Browsers handle the prompt natively
+// once the server replies with 401 + WWW-Authenticate.
+function checkBasicAuth(req) {
+  const header = req.headers["authorization"];
+  if (!header || !header.toLowerCase().startsWith("basic ")) return false;
+  let decoded;
+  try {
+    decoded = Buffer.from(header.slice(6).trim(), "base64").toString("utf8");
+  } catch { return false; }
+  const sep = decoded.indexOf(":");
+  if (sep === -1) return false;
+  const user = decoded.slice(0, sep);
+  const pass = decoded.slice(sep + 1);
+  return safeEq(user, env.authUser) && safeEq(pass, env.authPassword);
+}
+
+function safeEq(a, b) {
+  const ab = Buffer.from(String(a), "utf8");
+  const bb = Buffer.from(String(b), "utf8");
+  if (ab.length !== bb.length) {
+    // Still do a constant-time op against b to avoid leaking length via timing.
+    timingSafeEqual(bb, bb);
+    return false;
+  }
+  return timingSafeEqual(ab, bb);
 }

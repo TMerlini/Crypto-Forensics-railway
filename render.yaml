@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: sweeper-forensics
+    runtime: node
+    plan: free
+    buildCommand: npm install --omit=dev
+    startCommand: node src/server.mjs
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: AUTH_PASSWORD
+        sync: false
+      - key: AUTH_USER
+        value: admin
+      - key: ETHERSCAN_API_KEY
+        sync: false
+      - key: CHAIN_ID
+        value: "1"
+      - key: DIRECTION
+        value: both
+      - key: MAX_DEPTH
+        value: "5"
+      - key: MAX_ADDRESSES
+        value: "500"
+      - key: RATE_LIMIT_RPS
+        value: "4"
+      - key: STOP_AT_ORIGIN
+        value: "true"

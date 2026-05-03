@@ -1,0 +1,34 @@
+# Fly.io config for Sweeper Forensics. Generated with: `fly launch --no-deploy`
+# can re-write this; tweak as needed.
+
+app = "sweeper-forensics"
+primary_region = "iad"
+
+[build]
+
+[env]
+  NODE_ENV = "production"
+  CHAIN_ID = "1"
+  DIRECTION = "both"
+  MAX_DEPTH = "5"
+  MAX_ADDRESSES = "500"
+  RATE_LIMIT_RPS = "4"
+  STOP_AT_ORIGIN = "true"
+  # Secrets (set via `fly secrets set ...`):
+  #   AUTH_PASSWORD, ETHERSCAN_API_KEY
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[processes]
+  app = "node src/server.mjs"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
