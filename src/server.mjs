@@ -27,7 +27,7 @@ import { writeReports } from "./report.mjs";
 import { composeBundle, simulateRescue, submitRescue } from "./rescue.mjs";
 import { buildersForChain } from "./builders.mjs";
 import { extendChain } from "./extend-chain.mjs";
-import { resolveApiKey, resolveExplorer } from "./etherscan.mjs";
+import { resolveApiKey, chainInfo, CHAINS } from "./etherscan.mjs";
 
 // Server boots without any required env — both the API key and the scam address
 // can be entered in the UI per-request. We just warn if they are missing so the
@@ -88,6 +88,10 @@ const server = createServer(async (req, res) => {
       defaultMaxAddresses: env.maxAddresses,
       builderCountMainnet: buildersForChain(1).length,
       builderCountSepolia: buildersForChain(11155111).length,
+      // Map of chains the UI dropdown should label/disable. Lets the client
+      // tell users which chains require an Etherscan paid plan upfront,
+      // before they hit "Start trace" and waste an API call.
+      chains: CHAINS,
     });
 
     if (req.method === "POST" && p === "/api/trace") return startTrace(req, res);
@@ -156,10 +160,17 @@ async function startTrace(req, res) {
   };
   if (!/^0x[0-9a-f]{40}$/.test(params.scamAddress)) return sendJson(res, { error: "invalid scamAddress" }, 400);
   if (!params.apiKey) {
-    const ex = resolveExplorer(chainId);
     return sendJson(res, {
-      error: `Missing API key for ${ex.name}. Paste a key from https://${ex.explorerHost}/apis into the form, or set ${ex.envKey} on the server.`,
+      error: `Missing Etherscan API key. Generate one at https://etherscan.io/myapikey, paste it into the form, or set ETHERSCAN_API_KEY on the server.`,
     }, 400);
+  }
+  const ci = chainInfo(chainId);
+  if (ci.freeTier === false && !body.acknowledgedPaidTier) {
+    return sendJson(res, {
+      error: `${ci.name} (chainId ${chainId}) requires an Etherscan Lite or Pro plan — the V2 free tier excludes Base, Optimism, BSC, and Avalanche. Either upgrade at https://etherscan.io/apis or trace on Ethereum / Polygon / Arbitrum / Linea / Gnosis instead. If your key is already paid, retry with acknowledgedPaidTier=true (the UI does this for you).`,
+      paidTier: true,
+      chainName: ci.name,
+    }, 402);
   }
 
   const run = {
@@ -269,8 +280,7 @@ async function extendChainRoute(req, res) {
   const chainId = Number(body.chainId ?? env.chainId);
   const apiKey = resolveApiKey(chainId, body.apiKey);
   if (!apiKey) {
-    const ex = resolveExplorer(chainId);
-    return sendJson(res, { error: `Missing API key for ${ex.name}. Paste a key or set ${ex.envKey}.` }, 400);
+    return sendJson(res, { error: `Missing Etherscan API key. Paste one or set ETHERSCAN_API_KEY.` }, 400);
   }
   if (!/^0x[0-9a-f]{40}$/i.test(body.startAddress ?? "")) {
     return sendJson(res, { error: "invalid startAddress" }, 400);

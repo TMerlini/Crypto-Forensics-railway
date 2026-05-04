@@ -16,13 +16,11 @@ primary_region = "iad"
   RATE_LIMIT_RPS = "4"
   STOP_AT_ORIGIN = "true"
   # Secrets (set via `fly secrets set ...`):
-  #   AUTH_PASSWORD
-  #   ETHERSCAN_API_KEY            (Ethereum + Sepolia)
-  #   BASESCAN_API_KEY             (Base — basescan.org)
-  #   ARBISCAN_API_KEY             (Arbitrum)
-  #   OPTIMISTIC_ETHERSCAN_API_KEY (Optimism)
-  #   POLYGONSCAN_API_KEY          (Polygon)
-  #   BSCSCAN_API_KEY              (BSC)
+  #   AUTH_PASSWORD       Shared password for HTTP Basic auth (required).
+  #   ETHERSCAN_API_KEY   Etherscan V2 multichain key. Free tier covers
+  #                       Ethereum, Polygon, Arbitrum, Linea, Gnosis, etc.
+  #                       Etherscan Lite/Pro is required for Base, Optimism,
+  #                       BSC, Avalanche.
 
 [http_service]
   internal_port = 8080

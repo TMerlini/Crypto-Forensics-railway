@@ -140,6 +140,20 @@ button.danger:hover:not(:disabled) { background: rgba(255, 107, 107, 0.1); }
 }
 .warning strong { color: #ffde9a; }
 
+.paid-warn {
+  background: rgba(255, 200, 87, 0.08);
+  border: 1px solid rgba(255, 200, 87, 0.3);
+  color: var(--warn);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.paid-warn.hidden { display: none; }
+.paid-warn strong { color: #ffde9a; }
+.paid-warn a { color: var(--accent); }
+.paid-warn .checkbox { color: var(--text); font-size: 0.85rem; }
+
 /* Action cards (rescue) --------------------------------------- */
 .action-card {
   background: var(--panel-2);

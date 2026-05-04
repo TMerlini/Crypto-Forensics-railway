@@ -40,14 +40,27 @@
           </select>
         </label>
         <label>Chain
-          <select name="chainId">
-            <option value="1" selected>Ethereum (1)</option>
-            <option value="11155111">Sepolia (11155111)</option>
-            <option value="8453">Base (8453)</option>
-            <option value="42161">Arbitrum (42161)</option>
-            <option value="10">Optimism (10)</option>
-            <option value="137">Polygon (137)</option>
-            <option value="56">BSC (56)</option>
+          <select name="chainId" id="chain-select">
+            <optgroup label="Free tier (Etherscan free key)">
+              <option value="1" selected>Ethereum (1)</option>
+              <option value="137">Polygon (137)</option>
+              <option value="42161">Arbitrum (42161)</option>
+              <option value="59144">Linea (59144)</option>
+              <option value="100">Gnosis (100)</option>
+              <option value="81457">Blast (81457)</option>
+              <option value="5000">Mantle (5000)</option>
+              <option value="42220">Celo (42220)</option>
+              <option value="130">Unichain (130)</option>
+              <option value="146">Sonic (146)</option>
+              <option value="80094">Berachain (80094)</option>
+              <option value="11155111">Sepolia testnet (11155111)</option>
+            </optgroup>
+            <optgroup label="Etherscan Lite/Pro required">
+              <option value="8453">Base (8453) — paid</option>
+              <option value="10">Optimism (10) — paid</option>
+              <option value="56">BSC (56) — paid</option>
+              <option value="43114">Avalanche (43114) — paid</option>
+            </optgroup>
           </select>
         </label>
       </div>
@@ -63,9 +76,16 @@
         </label>
       </div>
       <label>API key
-        <span class="hint-inline">Free Etherscan keys only work on Ethereum + Sepolia. For Base / Arbitrum / Optimism / Polygon / BSC, sign up on that chain's native explorer (basescan.org, arbiscan.io, polygonscan.com, etc.) for a free chain-specific key. Optional if set in server env.</span>
+        <span class="hint-inline">One Etherscan V2 key works on every chain. <a href="https://etherscan.io/myapikey" target="_blank" rel="noopener">Generate one here</a> (free). Free tier covers Ethereum, Polygon, Arbitrum, Linea, Gnosis, Blast, Mantle, Celo, etc. Base, Optimism, BSC, and Avalanche need <a href="https://etherscan.io/apis" target="_blank" rel="noopener">Etherscan Lite or Pro</a>. Optional if set in server env.</span>
         <input type="password" name="apiKey" autocomplete="off" placeholder="leave blank to use server env" />
       </label>
+      <div id="paid-tier-warn" class="paid-warn hidden">
+        <strong>Heads up:</strong> <span id="paid-tier-name">This chain</span> is excluded from the Etherscan free tier. Tracing will fail unless your API key has an active <a href="https://etherscan.io/apis" target="_blank" rel="noopener">Etherscan Lite or Pro</a> subscription.
+        <label class="checkbox" style="margin-top: 0.5rem;">
+          <input type="checkbox" id="paid-tier-ack" />
+          I have a paid Etherscan plan, continue anyway
+        </label>
+      </div>
       <label class="checkbox">
         <input type="checkbox" name="stopAtOrigin" checked />
         Stop recursing at known CEX / bridge / mixer / contract

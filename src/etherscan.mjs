@@ -4,45 +4,72 @@
 //
 // Routing model
 // -------------
-// Etherscan V2 (api.etherscan.io/v2/api) advertises one-key-for-all-chains, but
-// the FREE tier of V2 only works for Ethereum mainnet + Sepolia. Hitting V2 for
-// any other chain on a free key returns:
+// As of May 2025, V1 chain-specific endpoints (api.basescan.org, api.arbiscan.io,
+// api.bscscan.com, etc.) are deprecated. ALL chain data is served exclusively
+// from the V2 multichain endpoint at https://api.etherscan.io/v2/api with a
+// `chainid` query parameter. One Etherscan account → one API key → 60+ chains.
+//
+// Source: https://docs.etherscan.io/etherscan-v2/getting-started/supported-chains
+//
+// Free vs paid tier
+// -----------------
+// V2 multichain works on the free tier for ~50 chains (Ethereum, Sepolia,
+// Polygon, Arbitrum, Linea, Gnosis, Mantle, Celo, Blast, Berachain, Sonic,
+// Unichain, …) — see CHAINS below. A handful of high-volume chains are paid
+// only: Base (8453), Base Sepolia (84532), Optimism (10, 11155420), BSC (56,
+// 97), Avalanche (43114, 43113). Hitting these on a free key returns:
 //   "Free API access is not supported for this chain. Please upgrade your api
 //    plan for full chain coverage."
-// To stay free-tier-friendly we keep V2 for mainnet/Sepolia and fall back to
-// each chain's native explorer (basescan.org, arbiscan.io, polygonscan.com, …)
-// for everything else. Users sign up for a free key on the relevant explorer
-// and paste it into the same form field — the client routes automatically.
+// Etherscan's "Lite" plan ($X/mo, 25% of the lowest paid tier) unlocks them
+// all. We surface this in the UI / error messages so users know what to do.
 
 const V2_BASE = "https://api.etherscan.io/v2/api";
 
-// chainId → { url, envKey, name, explorerHost }
-//   url           — V1 single-chain endpoint (free tier works)
-//   envKey        — env var name to look up if no key is supplied per-request
-//   name          — human-readable name for error messages
-//   explorerHost  — where the user signs up for an API key
-//   v2Capable     — true means V2 multichain works on the free tier (just ETH +
-//                   Sepolia today); else we always use the V1 url
-export const EXPLORERS = {
-  1:        { url: V2_BASE, envKey: "ETHERSCAN_API_KEY",            name: "Ethereum",   explorerHost: "etherscan.io",           v2Capable: true  },
-  11155111: { url: V2_BASE, envKey: "ETHERSCAN_API_KEY",            name: "Sepolia",    explorerHost: "etherscan.io",           v2Capable: true  },
-  8453:     { url: "https://api.basescan.org/api",                 envKey: "BASESCAN_API_KEY",        name: "Base",       explorerHost: "basescan.org",           v2Capable: false },
-  42161:    { url: "https://api.arbiscan.io/api",                  envKey: "ARBISCAN_API_KEY",        name: "Arbitrum",   explorerHost: "arbiscan.io",            v2Capable: false },
-  10:       { url: "https://api-optimistic.etherscan.io/api",      envKey: "OPTIMISTIC_ETHERSCAN_API_KEY", name: "Optimism", explorerHost: "optimistic.etherscan.io", v2Capable: false },
-  137:      { url: "https://api.polygonscan.com/api",              envKey: "POLYGONSCAN_API_KEY",     name: "Polygon",    explorerHost: "polygonscan.com",        v2Capable: false },
-  56:       { url: "https://api.bscscan.com/api",                  envKey: "BSCSCAN_API_KEY",         name: "BSC",        explorerHost: "bscscan.com",            v2Capable: false },
+// chainId → { name, freeTier }
+//   name      — human-readable name for messages
+//   freeTier  — true when V2 free key works, false when Etherscan Lite/Pro
+//               is required. Source of truth: Etherscan supported-chains docs.
+//
+// We only enumerate chains the UI exposes (or might soon). Other chain ids
+// fall back to "unknown" and we attempt the V2 call anyway — Etherscan will
+// answer authoritatively.
+export const CHAINS = {
+  1:        { name: "Ethereum",       freeTier: true  },
+  11155111: { name: "Sepolia",        freeTier: true  },
+  137:      { name: "Polygon",        freeTier: true  },
+  80002:    { name: "Polygon Amoy",   freeTier: true  },
+  42161:    { name: "Arbitrum One",   freeTier: true  },
+  421614:   { name: "Arbitrum Sepolia", freeTier: true },
+  59144:    { name: "Linea",          freeTier: true  },
+  100:      { name: "Gnosis",         freeTier: true  },
+  81457:    { name: "Blast",          freeTier: true  },
+  5000:     { name: "Mantle",         freeTier: true  },
+  42220:    { name: "Celo",           freeTier: true  },
+  130:      { name: "Unichain",       freeTier: true  },
+  146:      { name: "Sonic",          freeTier: true  },
+  80094:    { name: "Berachain",      freeTier: true  },
+
+  // Paid tier only (Etherscan Lite or Pro).
+  8453:     { name: "Base",           freeTier: false },
+  84532:    { name: "Base Sepolia",   freeTier: false },
+  10:       { name: "Optimism",       freeTier: false },
+  11155420: { name: "Optimism Sepolia", freeTier: false },
+  56:       { name: "BSC",            freeTier: false },
+  97:       { name: "BSC Testnet",    freeTier: false },
+  43114:    { name: "Avalanche",      freeTier: false },
+  43113:    { name: "Avalanche Fuji", freeTier: false },
 };
 
-export function resolveExplorer(chainId) {
-  return EXPLORERS[Number(chainId)] ?? EXPLORERS[1];
+export function chainInfo(chainId) {
+  return CHAINS[Number(chainId)] ?? { name: `chain ${chainId}`, freeTier: null };
 }
 
-// Pick the right API key for a chain: explicit override → per-chain env var
-// → fallback ETHERSCAN_API_KEY. Returns null if nothing is configured.
-export function resolveApiKey(chainId, override) {
+// Single env var. The Etherscan V2 key is used for every chain — there are no
+// per-chain free keys anymore (basescan.org/apis etc. all just redirect to
+// etherscan.io now). For paid chains the same key works once you upgrade to
+// Lite or Pro on your Etherscan account.
+export function resolveApiKey(_chainId, override) {
   if (override && String(override).trim()) return String(override).trim();
-  const ex = resolveExplorer(chainId);
-  if (ex.envKey && process.env[ex.envKey]) return process.env[ex.envKey];
   if (process.env.ETHERSCAN_API_KEY) return process.env.ETHERSCAN_API_KEY;
   return null;
 }
@@ -75,19 +102,17 @@ export class RateLimiter {
 export class Etherscan {
   constructor({ apiKey, chainId, rps = 4, baseUrl = null }) {
     if (!apiKey) throw new Error("API key is required");
-    const explorer = resolveExplorer(chainId);
     this.apiKey = apiKey;
     this.chainId = String(chainId);
     // Allow callers to force a custom URL (handy for self-hosted forks).
-    this.baseUrl = baseUrl ?? explorer.url;
-    this.useV2ChainId = !baseUrl && explorer.v2Capable;
-    this.explorerName = explorer.name;
+    this.baseUrl = baseUrl ?? V2_BASE;
+    this.chain = chainInfo(chainId);
     this.limiter = new RateLimiter(rps);
   }
 
   async _call(params, { retries = 5 } = {}) {
     const url = new URL(this.baseUrl);
-    if (this.useV2ChainId) url.searchParams.set("chainid", this.chainId);
+    url.searchParams.set("chainid", this.chainId);
     url.searchParams.set("apikey", this.apiKey);
     for (const [k, v] of Object.entries(params)) {
       if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
@@ -113,23 +138,37 @@ export class Etherscan {
         if (json.status === "1") return json.result;
         if (json.status === "0") {
           const msg = String(json.message || "").toLowerCase();
+          const resultStr = String(json.result ?? "").toLowerCase();
           if (msg.includes("no transactions") || msg.includes("no records")) return [];
-          if (msg.includes("rate limit") || msg.includes("max rate") || msg.includes("max calls")) {
+          if (msg.includes("rate limit") || msg.includes("max rate") || msg.includes("max calls") ||
+              resultStr.includes("max rate") || resultStr.includes("rate limit")) {
             lastErr = new Error(`rate-limited: ${json.message}`);
             await sleep(backoffMs(attempt));
             continue;
           }
-          // Pro-only chain on V2 free tier — the most common chain misconfig.
-          // Translate the cryptic upstream message into an actionable one.
-          if (msg.includes("not supported for this chain") || msg.includes("upgrade your api plan")) {
-            const ex = resolveExplorer(this.chainId);
+          // Paid-only chain hit on a free key — the most common chain misconfig.
+          // Translate the upstream message into something actionable.
+          if (msg.includes("not supported for this chain") ||
+              msg.includes("upgrade your api plan") ||
+              resultStr.includes("not supported for this chain") ||
+              resultStr.includes("upgrade your api plan")) {
             throw new Error(
-              `${this.explorerName} requires a chain-specific API key. ` +
-              `Sign up at https://${ex.explorerHost}/apis (free) and paste that key into the form ` +
-              `(or set ${ex.envKey} in the server env). The default Etherscan key only works on Ethereum + Sepolia.`,
+              `${this.chain.name} (chainId ${this.chainId}) requires an Etherscan paid plan. ` +
+              `The free V2 tier excludes Base, Optimism, BSC, and Avalanche. ` +
+              `Upgrade to Etherscan Lite or Pro at https://etherscan.io/apis — your existing ` +
+              `ETHERSCAN_API_KEY will then work on every chain. Free-tier alternatives: trace on ` +
+              `Ethereum, Polygon, Arbitrum, Linea, Gnosis, Blast, or Mantle instead.`,
             );
           }
-          // Other status=0 — surface as error
+          // Invalid API key — point users at the right place.
+          if (msg.includes("invalid api key") || resultStr.includes("invalid api key")) {
+            throw new Error(
+              `Etherscan rejected the API key. Generate a new one at https://etherscan.io/myapikey ` +
+              `and set ETHERSCAN_API_KEY (or paste it into the form).`,
+            );
+          }
+          // Other status=0 — surface as error with both fields so debugging
+          // is possible without staring at NOTOK in the log.
           throw new Error(`Etherscan: ${json.message} | ${JSON.stringify(json.result)}`);
         }
         return json.result ?? [];

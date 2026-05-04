@@ -19,6 +19,10 @@ $$(".tab").forEach((t) =>
 // ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
+// Server-supplied chain metadata: { [chainId]: { name, freeTier } }. Used by
+// the dropdown change handler to show/hide the paid-tier warning.
+let chainMeta = {};
+
 (async () => {
   try {
     const cfg = await fetch("/api/config").then((r) => r.json());
@@ -27,10 +31,28 @@ $$(".tab").forEach((t) =>
     if (cfg.defaultDirection) $("[name=direction]").value = cfg.defaultDirection;
     if (cfg.defaultMaxDepth) $("[name=maxDepth]").value = cfg.defaultMaxDepth;
     if (cfg.defaultMaxAddresses) $("[name=maxAddresses]").value = cfg.defaultMaxAddresses;
+    chainMeta = cfg.chains ?? {};
+    syncPaidTierWarn();
   } catch (err) {
     $("#chain-badge").textContent = "offline";
   }
 })();
+
+function syncPaidTierWarn() {
+  const sel = $("#chain-select");
+  const warn = $("#paid-tier-warn");
+  const ack = $("#paid-tier-ack");
+  if (!sel || !warn) return;
+  const id = String(sel.value);
+  const info = chainMeta[id];
+  const isPaid = info && info.freeTier === false;
+  warn.classList.toggle("hidden", !isPaid);
+  if (isPaid) $("#paid-tier-name").textContent = info.name;
+  if (!isPaid && ack) ack.checked = false;
+}
+document.addEventListener("change", (e) => {
+  if (e.target && e.target.id === "chain-select") syncPaidTierWarn();
+});
 
 // ---------------------------------------------------------------------------
 // TRACE
@@ -54,6 +76,17 @@ $("#trace-form").addEventListener("submit", async (e) => {
   body.rps = Number(body.rps);
   body.chainId = Number(body.chainId);
   body.stopAtOrigin = fd.get("stopAtOrigin") === "on";
+
+  // Paid-tier chains: server rejects with HTTP 402 unless the user has ticked
+  // the "I have a paid plan" box. We forward that signal explicitly so the
+  // server never starts a trace that's certain to fail on a free key.
+  const ackBox = $("#paid-tier-ack");
+  body.acknowledgedPaidTier = ackBox?.checked === true;
+  const info = chainMeta[String(body.chainId)];
+  if (info && info.freeTier === false && !body.acknowledgedPaidTier) {
+    alert(`${info.name} requires an Etherscan Lite or Pro plan. Tick the "I have a paid plan" box to continue, or pick a free-tier chain (Ethereum, Polygon, Arbitrum, Linea, Gnosis, Blast, Mantle…).`);
+    return;
+  }
 
   const res = await fetch("/api/trace", {
     method: "POST",

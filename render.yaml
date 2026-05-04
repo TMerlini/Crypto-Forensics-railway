@@ -12,18 +12,10 @@ services:
         sync: false
       - key: AUTH_USER
         value: admin
+      # Etherscan V2 multichain key — works on every supported chain.
+      # Free tier covers Ethereum, Polygon, Arbitrum, Linea, Gnosis, etc.
+      # Etherscan Lite/Pro is required for Base, Optimism, BSC, Avalanche.
       - key: ETHERSCAN_API_KEY
-        sync: false
-      # Per-chain free keys (optional). Set whichever chains you trace on.
-      - key: BASESCAN_API_KEY
-        sync: false
-      - key: ARBISCAN_API_KEY
-        sync: false
-      - key: OPTIMISTIC_ETHERSCAN_API_KEY
-        sync: false
-      - key: POLYGONSCAN_API_KEY
-        sync: false
-      - key: BSCSCAN_API_KEY
         sync: false
       - key: CHAIN_ID
         value: "1"

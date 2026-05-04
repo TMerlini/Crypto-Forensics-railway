@@ -77,22 +77,34 @@ The same Node server runs unmodified on any platform that speaks the standard
 | `ETHERSCAN_API_KEY` | Ethereum mainnet + Sepolia. Optional default; users can paste their own in the UI. |
 | `CHAIN_ID` | Default chain shown in UI (`1` = mainnet). |
 
-#### Per-chain API keys (free tier)
+#### Multichain coverage with one Etherscan key
 
-Etherscan's V2 multichain free tier only covers Ethereum + Sepolia. For other
-chains, sign up on that chain's native explorer for a free key and set the
-matching env var (or paste it into the UI). The server routes automatically.
+Etherscan V2 (`api.etherscan.io/v2/api`) is the unified API for ~60 EVM chains.
+The legacy V1 endpoints (`api.basescan.org`, `api.arbiscan.io`,
+`api.bscscan.com`, …) were retired on **May 31, 2025**. There are no separate
+per-chain keys anymore — every chain runs through the same V2 endpoint with a
+`chainid` query parameter.
 
-| Chain | Env var | Sign up at |
-|---|---|---|
-| Base | `BASESCAN_API_KEY` | basescan.org/apis |
-| Arbitrum | `ARBISCAN_API_KEY` | arbiscan.io/apis |
-| Optimism | `OPTIMISTIC_ETHERSCAN_API_KEY` | optimistic.etherscan.io/apis |
-| Polygon | `POLYGONSCAN_API_KEY` | polygonscan.com/apis |
-| BSC | `BSCSCAN_API_KEY` | bscscan.com/apis |
+Authoritative list:
+[Etherscan V2 supported chains](https://docs.etherscan.io/etherscan-v2/getting-started/supported-chains).
 
-If you have an Etherscan **Pro** plan, just set `ETHERSCAN_API_KEY` and skip
-the per-chain ones — Pro covers all chains via the V2 multichain endpoint.
+**Free tier** (just sign up at [etherscan.io/myapikey](https://etherscan.io/myapikey)):
+Ethereum (1), Sepolia (11155111), Polygon (137), Arbitrum (42161), Linea
+(59144), Gnosis (100), Blast (81457), Mantle (5000), Celo (42220), Unichain
+(130), Sonic (146), Berachain (80094), and ~30 more.
+
+**Etherscan Lite or Pro required** ([etherscan.io/apis](https://etherscan.io/apis)):
+Base (8453, 84532), Optimism (10, 11155420), BSC (56, 97), Avalanche (43114,
+43113). Hitting these on a free key returns:
+
+> Free API access is not supported for this chain. Please upgrade your api
+> plan for full chain coverage.
+
+The Lite plan (priced at 25% of the previous lowest paid tier) is the cheapest
+path; the same `ETHERSCAN_API_KEY` then works for every chain.
+
+The UI marks paid-tier chains in the dropdown and shows a confirm box before
+starting a trace on one — no API calls are wasted on free keys hitting Base.
 
 ### Railway
 
