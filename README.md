@@ -108,7 +108,7 @@ starting a trace on one — no API calls are wasted on free keys hitting Base.
 
 **Rate limiting.** Free tier is about **3 calls/sec** (see [Etherscan APIs](https://etherscan.io/apis)). This repo defaults to **2.5 req/s** via `RATE_LIMIT_RPS` and the Trace form — staying under that avoids long stalls when Etherscan returns `Max calls per sec rate limit reached`. **Adaptive rate limiting** (on by default; toggle in the Trace form or set `ETHERSCAN_ADAPTIVE_RPS=false` to disable) widens spacing after throttling and creeps back toward your target RPS when responses succeed. While one address paginates heavily, the UI and CLI log **etherscan-page** lines so progress does not look frozen below `MAX_ADDRESSES`. If another tool shares the same key, lower to `2` or `1`. Paid Lite/Pro tiers allow higher throughput.
 
-The **Reports** tab lists curated **`reports/*.html` and `reports/*.md`** analyses from the repo (open in a new tab), shows a compact snapshot of the latest trace from this browser session, and can **download a filled `trace-search-report.canvas.tsx`** for Cursor Canvas beside the chat. A template lives in `canvases/trace-search-report.canvas.tsx`.
+The **Reports** tab lists curated **`reports/*.html` and `reports/*.md`** analyses from the repo (open in a new tab). Filenames ending with `-YYYY-MM-DD` show that date as a pill; **Latest** marks every report on the newest date batch. The tab also shows a compact snapshot of the latest trace from this browser session and can **download a filled `trace-search-report.canvas.tsx`** for Cursor Canvas beside the chat. A template lives in `canvases/trace-search-report.canvas.tsx`.
 
 ### Railway
 

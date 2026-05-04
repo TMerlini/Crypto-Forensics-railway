@@ -186,7 +186,18 @@ async function loadWrittenReportsList() {
         const mdBtn = item.md
           ? `<a class="button-link" href="/api/reports/file/${encodeURIComponent(item.md)}" target="_blank" rel="noopener">Markdown</a>`
           : "";
+        const slugDate =
+          typeof item.slugDate === "string" && item.slugDate ? escapeHtml(item.slugDate) : null;
+        const tags = [];
+        if (item.isLatest === true) {
+          tags.push(`<span class="reports-tag reports-tag-latest">Latest</span>`);
+        }
+        if (slugDate) {
+          tags.push(`<span class="reports-tag reports-tag-date">${slugDate}</span>`);
+        }
+        const tagRow = tags.length ? `<div class="reports-tag-row">${tags.join("")}</div>` : "";
         return `<div class="reports-library-card">
+          ${tagRow}
           <div class="reports-library-head">
             <span class="reports-library-slug">${escapeHtml(item.slug)}</span>
             <span class="reports-library-meta">${escapeHtml(date)}</span>

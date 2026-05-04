@@ -14,7 +14,7 @@
 //   POST /api/rescue/simulate    → simulate a composed bundle against latest state
 //   POST /api/rescue/submit      → submit composed bundle to builders (SSE stream)
 //   GET  /api/playbook           → RECOVERY.md as HTML
-//   GET  /api/reports            → list curated analyses in reports/*.html|.md
+//   GET  /api/reports            → list curated analyses (Latest + slugDate from -YYYY-MM-DD tail)
 //   GET  /api/reports/file/:name → serve one report file (basename only)
 
 import { createServer } from "node:http";
@@ -463,6 +463,28 @@ function listWrittenReports(res) {
   }
 
   const items = [...bySlug.values()].sort((a, b) => b.mtimeMs - a.mtimeMs);
+
+  const slugTailDate = /^.+-(\d{4}-\d{2}-\d{2})$/;
+  for (const row of items) {
+    const m = slugTailDate.exec(row.slug);
+    row.slugDate = m ? m[1] : null;
+  }
+  const dates = items.map((r) => r.slugDate).filter(Boolean);
+  const maxSlugDate = dates.length ? dates.reduce((a, b) => (a >= b ? a : b)) : null;
+  if (maxSlugDate) {
+    for (const row of items) {
+      row.isLatest = row.slugDate === maxSlugDate;
+    }
+  } else {
+    const maxT = items.length ? Math.max(...items.map((r) => r.mtimeMs)) : 0;
+    let seen = false;
+    for (const row of items) {
+      const top = row.mtimeMs === maxT && maxT > 0;
+      row.isLatest = top && !seen;
+      if (top) seen = true;
+    }
+  }
+
   return sendJson(res, { items });
 }
 
