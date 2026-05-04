@@ -27,6 +27,7 @@ import { writeReports } from "./report.mjs";
 import { composeBundle, simulateRescue, submitRescue } from "./rescue.mjs";
 import { buildersForChain } from "./builders.mjs";
 import { extendChain } from "./extend-chain.mjs";
+import { resolveApiKey, resolveExplorer } from "./etherscan.mjs";
 
 // Server boots without any required env — both the API key and the scam address
 // can be entered in the UI per-request. We just warn if they are missing so the
@@ -142,9 +143,10 @@ server.listen(env.serverPort, env.serverBind, () => {
 async function startTrace(req, res) {
   const body = await readJsonBody(req);
   const id = randomUUID();
+  const chainId = Number(body.chainId ?? env.chainId);
   const params = {
-    apiKey: body.apiKey?.trim() || env.apiKey,
-    chainId: Number(body.chainId ?? env.chainId),
+    apiKey: resolveApiKey(chainId, body.apiKey),
+    chainId,
     scamAddress: String(body.scamAddress ?? "").toLowerCase(),
     maxDepth: clamp(Number(body.maxDepth ?? env.maxDepth), 1, 50),
     maxAddresses: clamp(Number(body.maxAddresses ?? env.maxAddresses), 1, 50_000),
@@ -153,7 +155,12 @@ async function startTrace(req, res) {
     direction: ["in", "out", "both"].includes(body.direction) ? body.direction : env.direction,
   };
   if (!/^0x[0-9a-f]{40}$/.test(params.scamAddress)) return sendJson(res, { error: "invalid scamAddress" }, 400);
-  if (!params.apiKey) return sendJson(res, { error: "missing apiKey (paste in form or set ETHERSCAN_API_KEY in .env)" }, 400);
+  if (!params.apiKey) {
+    const ex = resolveExplorer(chainId);
+    return sendJson(res, {
+      error: `Missing API key for ${ex.name}. Paste a key from https://${ex.explorerHost}/apis into the form, or set ${ex.envKey} on the server.`,
+    }, 400);
+  }
 
   const run = {
     id,
@@ -259,14 +266,17 @@ function sendReport(id, res) {
 // -----------------------------------------------------------------------------
 async function extendChainRoute(req, res) {
   const body = await readJsonBody(req);
-  const apiKey = (body.apiKey?.trim?.() || env.apiKey || "").trim();
-  if (!apiKey) return sendJson(res, { error: "missing apiKey" }, 400);
+  const chainId = Number(body.chainId ?? env.chainId);
+  const apiKey = resolveApiKey(chainId, body.apiKey);
+  if (!apiKey) {
+    const ex = resolveExplorer(chainId);
+    return sendJson(res, { error: `Missing API key for ${ex.name}. Paste a key or set ${ex.envKey}.` }, 400);
+  }
   if (!/^0x[0-9a-f]{40}$/i.test(body.startAddress ?? "")) {
     return sendJson(res, { error: "invalid startAddress" }, 400);
   }
   const direction = body.direction === "backward" ? "backward" : body.direction === "forward" ? "forward" : null;
   if (!direction) return sendJson(res, { error: "direction must be 'backward' or 'forward'" }, 400);
-  const chainId = Number(body.chainId ?? env.chainId);
   const hops = clamp(Number(body.hops ?? 5), 1, 20);
   const rps = clamp(Number(body.rps ?? env.rps), 1, 30);
   const startHop = clamp(Number(body.startHop ?? 0), 0, 1000);

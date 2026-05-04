@@ -16,7 +16,13 @@ primary_region = "iad"
   RATE_LIMIT_RPS = "4"
   STOP_AT_ORIGIN = "true"
   # Secrets (set via `fly secrets set ...`):
-  #   AUTH_PASSWORD, ETHERSCAN_API_KEY
+  #   AUTH_PASSWORD
+  #   ETHERSCAN_API_KEY            (Ethereum + Sepolia)
+  #   BASESCAN_API_KEY             (Base — basescan.org)
+  #   ARBISCAN_API_KEY             (Arbitrum)
+  #   OPTIMISTIC_ETHERSCAN_API_KEY (Optimism)
+  #   POLYGONSCAN_API_KEY          (Polygon)
+  #   BSCSCAN_API_KEY              (BSC)
 
 [http_service]
   internal_port = 8080

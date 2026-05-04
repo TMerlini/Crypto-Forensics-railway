@@ -62,8 +62,9 @@
           <input type="number" name="rps" value="4" min="1" max="30" />
         </label>
       </div>
-      <label>Etherscan V2 API key (optional if set in <code>.env</code>)
-        <input type="password" name="apiKey" autocomplete="off" placeholder="leave blank to use .env" />
+      <label>API key
+        <span class="hint-inline">Free Etherscan keys only work on Ethereum + Sepolia. For Base / Arbitrum / Optimism / Polygon / BSC, sign up on that chain's native explorer (basescan.org, arbiscan.io, polygonscan.com, etc.) for a free chain-specific key. Optional if set in server env.</span>
+        <input type="password" name="apiKey" autocomplete="off" placeholder="leave blank to use server env" />
       </label>
       <label class="checkbox">
         <input type="checkbox" name="stopAtOrigin" checked />

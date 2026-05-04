@@ -74,8 +74,25 @@ The same Node server runs unmodified on any platform that speaks the standard
 |---|---|
 | `AUTH_PASSWORD` | Shared password for HTTP Basic auth. **Required.** |
 | `AUTH_USER` | Username (defaults to `admin`). Optional. |
-| `ETHERSCAN_API_KEY` | Optional default; users can paste their own in the UI. |
+| `ETHERSCAN_API_KEY` | Ethereum mainnet + Sepolia. Optional default; users can paste their own in the UI. |
 | `CHAIN_ID` | Default chain shown in UI (`1` = mainnet). |
+
+#### Per-chain API keys (free tier)
+
+Etherscan's V2 multichain free tier only covers Ethereum + Sepolia. For other
+chains, sign up on that chain's native explorer for a free key and set the
+matching env var (or paste it into the UI). The server routes automatically.
+
+| Chain | Env var | Sign up at |
+|---|---|---|
+| Base | `BASESCAN_API_KEY` | basescan.org/apis |
+| Arbitrum | `ARBISCAN_API_KEY` | arbiscan.io/apis |
+| Optimism | `OPTIMISTIC_ETHERSCAN_API_KEY` | optimistic.etherscan.io/apis |
+| Polygon | `POLYGONSCAN_API_KEY` | polygonscan.com/apis |
+| BSC | `BSCSCAN_API_KEY` | bscscan.com/apis |
+
+If you have an Etherscan **Pro** plan, just set `ETHERSCAN_API_KEY` and skip
+the per-chain ones — Pro covers all chains via the V2 multichain endpoint.
 
 ### Railway
 
