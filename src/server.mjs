@@ -14,10 +14,12 @@
 //   POST /api/rescue/simulate    → simulate a composed bundle against latest state
 //   POST /api/rescue/submit      → submit composed bundle to builders (SSE stream)
 //   GET  /api/playbook           → RECOVERY.md as HTML
+//   GET  /api/reports            → list curated analyses in reports/*.html|.md
+//   GET  /api/reports/file/:name → serve one report file (basename only)
 
 import { createServer } from "node:http";
-import { readFileSync, existsSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
-import { join, dirname, extname } from "node:path";
+import { readFileSync, existsSync, readdirSync, writeFileSync, mkdirSync, statSync } from "node:fs";
+import { join, dirname, extname, resolve, sep as pathSep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { loadEnv } from "./env.mjs";
@@ -37,6 +39,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, "..");
 const webDir = join(rootDir, "web");
 const outDir = join(rootDir, "out");
+const reportsDir = join(rootDir, "reports");
 // Skip persistent state on hosted platforms — their FS is ephemeral and the
 // History tab is opt-in via env anyway. Locally we keep the old behaviour.
 if (!env.disableDisk) mkdirSync(outDir, { recursive: true });
@@ -115,6 +118,12 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && p === "/api/rescue/submit") return rescueSubmit(req, res);
 
     if (req.method === "GET" && p === "/api/playbook") return sendPlaybook(res);
+
+    if (req.method === "GET" && p.startsWith("/api/reports/file/")) {
+      const name = decodeURIComponent(p.slice("/api/reports/file/".length));
+      return sendReportsFile(res, name);
+    }
+    if (req.method === "GET" && p === "/api/reports") return listWrittenReports(res);
 
     res.statusCode = 404;
     res.setHeader("content-type", "application/json");
@@ -406,6 +415,65 @@ function deriveSearcherKey() {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
   return "0x" + [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// -----------------------------------------------------------------------------
+// /api/reports — curated HTML/Markdown investigations (repo reports/)
+// -----------------------------------------------------------------------------
+function reportsRootResolved() {
+  return resolve(reportsDir);
+}
+
+function safeReportsFile(name) {
+  if (typeof name !== "string" || name.includes("/") || name.includes("\\")) return null;
+  if (!/^[a-zA-Z0-9._-]+\.(html|md)$/i.test(name)) return null;
+  const rootResolved = reportsRootResolved();
+  const full = resolve(join(rootResolved, name));
+  const prefix = rootResolved.endsWith(pathSep) ? rootResolved : rootResolved + pathSep;
+  if (!full.startsWith(prefix)) return null;
+  return full;
+}
+
+function listWrittenReports(res) {
+  try {
+    mkdirSync(reportsDir, { recursive: true });
+  } catch {}
+  if (!existsSync(reportsDir)) return sendJson(res, { items: [] });
+
+  const names = readdirSync(reportsDir, { withFileTypes: true })
+    .filter((d) => d.isFile())
+    .map((d) => d.name)
+    .filter((n) => /\.(html|md)$/i.test(n));
+
+  const bySlug = new Map();
+  for (const name of names) {
+    const lower = name.toLowerCase();
+    const ext = lower.endsWith(".html") ? "html" : "md";
+    const slug = ext === "html" ? name.slice(0, -5) : name.slice(0, -4);
+    let mtimeMs = 0;
+    try {
+      mtimeMs = statSync(join(reportsDir, name)).mtimeMs;
+    } catch {
+      continue;
+    }
+    if (!bySlug.has(slug)) bySlug.set(slug, { slug, html: null, md: null, mtimeMs: 0 });
+    const row = bySlug.get(slug);
+    row[ext] = name;
+    row.mtimeMs = Math.max(row.mtimeMs, mtimeMs);
+  }
+
+  const items = [...bySlug.values()].sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return sendJson(res, { items });
+}
+
+function sendReportsFile(res, name) {
+  const full = safeReportsFile(name);
+  if (!full || !existsSync(full)) {
+    res.statusCode = 404;
+    res.setHeader("content-type", "application/json");
+    return res.end(JSON.stringify({ error: "not found" }));
+  }
+  return sendFile(res, full);
 }
 
 // -----------------------------------------------------------------------------

@@ -13,7 +13,10 @@ $$(".tab").forEach((t) =>
     $$(".panel").forEach((p) => p.classList.toggle("active", p.dataset.panel === t.dataset.tab));
     if (t.dataset.tab === "history") loadHistory();
     if (t.dataset.tab === "playbook") loadPlaybook();
-    if (t.dataset.tab === "reports") refreshReportsTab();
+    if (t.dataset.tab === "reports") {
+      refreshReportsTab();
+      loadWrittenReportsList();
+    }
   }),
 );
 
@@ -158,6 +161,44 @@ function handleTraceEvent(ev, cap) {
     $("#trace-abort").disabled = true;
   } else if (ev.type === "cap-reached") {
     log.textContent += `\n[cap reached: ${ev.cap} addresses]\n`;
+  }
+}
+
+async function loadWrittenReportsList() {
+  const box = $("#reports-library");
+  if (!box) return;
+  try {
+    const r = await fetch("/api/reports");
+    if (!r.ok) throw new Error("bad response");
+    const data = await r.json();
+    const items = data.items ?? [];
+    if (!items.length) {
+      box.innerHTML =
+        `<p class="hint">No curated reports yet. Add <code>.html</code> / <code>.md</code> files under <code class="mono-inline">reports/</code> in the repo and redeploy (Railway) or restart the UI locally.</p>`;
+      return;
+    }
+    const rows = items
+      .map((item) => {
+        const date = item.mtimeMs ? new Date(item.mtimeMs).toISOString().slice(0, 10) : "—";
+        const htmlBtn = item.html
+          ? `<a class="button-link" href="/api/reports/file/${encodeURIComponent(item.html)}" target="_blank" rel="noopener">HTML</a>`
+          : "";
+        const mdBtn = item.md
+          ? `<a class="button-link" href="/api/reports/file/${encodeURIComponent(item.md)}" target="_blank" rel="noopener">Markdown</a>`
+          : "";
+        return `<div class="reports-library-card">
+          <div class="reports-library-head">
+            <span class="reports-library-slug">${escapeHtml(item.slug)}</span>
+            <span class="reports-library-meta">${escapeHtml(date)}</span>
+          </div>
+          <div class="reports-library-actions">${htmlBtn}${mdBtn}</div>
+        </div>`;
+      })
+      .join("");
+    box.innerHTML = rows;
+  } catch {
+    box.innerHTML =
+      `<p class="hint">Could not load written reports (server unreachable or old deployment).</p>`;
   }
 }
 

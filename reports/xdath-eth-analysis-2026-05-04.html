@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cluster Review — xdath.eth (0x19745f6d…) — 2026-05-04</title>
+<style>
+  :root {
+    --fg: #1a1a1a;
+    --fg-muted: #555;
+    --fg-faint: #888;
+    --accent: #1e5fbf;
+    --accent-soft: #e7efff;
+    --danger: #b8004a;
+    --danger-soft: #fce4ec;
+    --warn: #a06a00;
+    --warn-soft: #fff4e0;
+    --success: #1f8a65;
+    --success-soft: #e3f5ec;
+    --bg: #fff;
+    --rule: #d8d8d8;
+    --code-bg: #f3f4f6;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font: 14px/1.55 var(--sans);
+    color: var(--fg);
+    background: var(--bg);
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 48px 56px 96px;
+  }
+  header.cover { border-bottom: 2px solid var(--fg); padding-bottom: 24px; margin-bottom: 32px; }
+  header.cover .eyebrow {
+    font: 11px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.12em;
+    color: var(--fg-muted); margin-bottom: 12px;
+  }
+  header.cover h1 {
+    font-size: 26px; line-height: 1.25; margin: 0 0 8px; font-weight: 600; letter-spacing: -0.01em;
+  }
+  header.cover .subtitle { color: var(--fg-muted); font-size: 15px; margin: 0 0 18px; }
+  header.cover .verdict {
+    display: inline-block;
+    background: var(--success); color: #fff; font-weight: 600;
+    padding: 4px 12px; font-size: 11px; letter-spacing: 0.06em; border-radius: 3px;
+    text-transform: uppercase;
+  }
+  h2 {
+    font-size: 18px; font-weight: 600; margin: 36px 0 12px;
+    padding-bottom: 6px; border-bottom: 1px solid var(--rule);
+  }
+  h3 { font-size: 15px; font-weight: 600; margin: 24px 0 8px; }
+  p { margin: 0 0 12px; }
+  ul, ol { margin: 0 0 12px; padding-left: 22px; }
+  li { margin-bottom: 4px; }
+  code, .mono {
+    font-family: var(--mono);
+    font-size: 0.92em;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+    word-break: break-all;
+  }
+  pre {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--code-bg);
+    padding: 12px 14px;
+    border-radius: 5px;
+    border-left: 3px solid var(--accent);
+    overflow-x: auto;
+    margin: 8px 0 16px;
+    line-height: 1.5;
+  }
+  blockquote.warn {
+    margin: 8px 0 16px;
+    padding: 10px 14px;
+    border-left: 3px solid var(--warn);
+    background: var(--warn-soft);
+    font-size: 13px;
+  }
+  blockquote.success {
+    margin: 8px 0 16px;
+    padding: 10px 14px;
+    border-left: 3px solid var(--success);
+    background: var(--success-soft);
+    font-size: 13px;
+  }
+  table {
+    width: 100%; border-collapse: collapse;
+    font-size: 13px; margin: 8px 0 18px;
+  }
+  th, td {
+    border-bottom: 1px solid var(--rule);
+    padding: 8px 10px; vertical-align: top; text-align: left;
+  }
+  th { font-weight: 600; background: #f7f7f7; font-size: 12px; }
+  .meta-table th { width: 32%; }
+  .stats {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 20px 0 28px;
+  }
+  .stat {
+    border: 1px solid var(--rule); border-radius: 6px;
+    padding: 14px 16px;
+  }
+  .stat .v { font-size: 22px; font-weight: 600; line-height: 1.2; letter-spacing: -0.01em; }
+  .stat .l { font-size: 11px; color: var(--fg-muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat.info   .v { color: var(--accent); }
+  .stat.ok     .v { color: var(--success); }
+
+  .toc {
+    background: #fafafa; border: 1px solid var(--rule); border-radius: 5px;
+    padding: 12px 18px; font-size: 13px; margin: 0 0 32px;
+  }
+  .toc ol { margin: 4px 0 0; padding-left: 22px; }
+  .toc a { color: var(--fg); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+
+  footer {
+    margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--rule);
+    font-size: 11px; color: var(--fg-muted);
+  }
+
+  @media print {
+    @page { margin: 16mm 14mm 18mm; size: A4; }
+    body { padding: 0; max-width: none; font-size: 11px; line-height: 1.45; }
+    h2 { page-break-after: avoid; font-size: 15px; margin-top: 24px; }
+    h3 { page-break-after: avoid; font-size: 13px; }
+    .stat .v { font-size: 18px; }
+    table { page-break-inside: auto; font-size: 10px; }
+    tr, td, th { page-break-inside: avoid; }
+    pre, blockquote { page-break-inside: avoid; }
+    a { color: var(--fg); text-decoration: none; }
+    a[href]::after {
+      content: " (" attr(href) ")";
+      font-size: 9px; color: var(--fg-muted); word-break: break-all;
+    }
+    a[href^="#"]::after { content: ""; }
+    .toc { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="cover">
+  <div class="eyebrow">Cluster review · Forensic correction</div>
+  <h1>xdath.eth (<code>0x19745f6d…</code>) — false positive in BankrBot/Grok cluster</h1>
+  <p class="subtitle">Follow-up review of an address listed as a "co-funded cluster wallet" in the BankrBot/Grok heist report. Free-tier evidence shows it is a legitimate 3-year-old DeFi power user with no Base-side activity, no DRB exposure, and no direct funding from the laundering hub.</p>
+  <span class="verdict">Verdict — Not implicated</span>
+</header>
+
+<table class="meta-table">
+  <tr><th>Date</th><td>May 4, 2026</td></tr>
+  <tr><th>Subject</th><td><code>0x19745f6d7a0ec2585c9a00245da657a9895a9f27</code> (ENS: <code>xdath.eth</code>)</td></tr>
+  <tr><th>Tooling</th><td>Etherscan V2 free tier (via MCP), public web sources</td></tr>
+  <tr><th>Prior report</th><td><a href="./bankrbot-grok-heist-2026-05-04.html">BankrBot / Grok Morse-code Heist (2026-05-04)</a></td></tr>
+  <tr><th>Action requested</th><td>Strike from "Cluster wallets" table; add footnote</td></tr>
+</table>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#tldr">TL;DR</a></li>
+    <li><a href="#why">Why it ended up in the prior cluster</a></li>
+    <li><a href="#evidence">Evidence</a></li>
+    <li><a href="#update">What to update in the prior report</a></li>
+    <li><a href="#caveats">Caveats</a></li>
+    <li><a href="#sources">Source links</a></li>
+  </ol>
+</nav>
+
+<h2 id="tldr">TL;DR</h2>
+
+<div class="stats">
+  <div class="stat info"><div class="v">527</div><div class="l">Mainnet txs</div></div>
+  <div class="stat info"><div class="v">3y 212d</div><div class="l">Wallet age</div></div>
+  <div class="stat ok"><div class="v">0</div><div class="l">Direct hub txs</div></div>
+  <div class="stat ok"><div class="v">0</div><div class="l">DRB / BankrBot exposure</div></div>
+</div>
+
+<p>The address <code>0x19745f6d…</code> was listed in the <a href="./bankrbot-grok-heist-2026-05-04.html">BankrBot/Grok heist report</a> as a "co-funded cluster wallet (Indonesian handle)." A focused review of the wallet's free-tier-visible history shows that this attribution is wrong:</p>
+
+<ul>
+  <li><strong>3 years 212 days old</strong>, <strong>527 mainnet txs</strong>, active across at least <strong>5 EVM chains</strong>.</li>
+  <li><strong>Originally funded by <code>0xC6D7CbA2…c9c92b0C2</code></strong> in October 2022 — <em>not</em> by the laundering hub <code>0xee16…7ac3</code>.</li>
+  <li><strong>Recently funded by OKX Hot Wallet 3</strong> and trades through OKX's DEX router. Profile of a KYC'd CEX user.</li>
+  <li><strong>No DRB exposure, no BankrBot interaction, no Base-side activity</strong> in the visible sample.</li>
+  <li>DeFi footprint covers Aave V3, zkSync, Uniswap, 1inch, OpenSea Seaport, Curve (Usual.money), Layer3 staking, NFT mints, Ethscriptions inscriptions.</li>
+</ul>
+
+<blockquote class="success">
+  The wallet's only tie to the laundering hub is a single co-occurrence on the hub's Etherscan counterparty page. That signal alone is not enough to add a wallet to the cluster, and the rest of the data refutes it.
+</blockquote>
+
+<h2 id="why">Why it ended up in the prior cluster</h2>
+
+<p>The BankrBot writeup used the laundering hub's outbound counterparty page as a proxy for "wallets the hub funded." That works for single-purpose Base-side burners (the hub creates them, sends the gas, they receive stolen DRB, they cash out). It does <strong>not</strong> work for any preexisting mainnet wallet that happens to share a transaction with the hub for unrelated reasons (small swap, dust, wrong-send, OTC).</p>
+
+<p><code>xdath.eth</code> is the second category.</p>
+
+<h2 id="evidence">Evidence</h2>
+
+<h3>Wallet shape</h3>
+
+<table>
+  <thead><tr><th>Metric</th><th>Value</th><th>What burners look like</th></tr></thead>
+  <tbody>
+    <tr><td>Age</td><td>3 yrs 212 days (first tx Oct 2022)</td><td>&lt; 30 days</td></tr>
+    <tr><td>Total mainnet txs</td><td>527</td><td>&lt; 50</td></tr>
+    <tr><td>Chains active</td><td>Eth, Polygon, Arbitrum, Linea, Gnosis, BSC, Taiko (≥ 7)</td><td>Single chain</td></tr>
+    <tr><td>Latest activity</td><td>~2 hours before this review</td><td>Quiet after cash-out</td></tr>
+  </tbody>
+</table>
+
+<h3>Funding source</h3>
+
+<p>Etherscan's "Funded By" (the very first inbound) for <code>xdath.eth</code>:</p>
+
+<pre>0xC6D7CbA263bc5AFb0Ecc97820D8c6c6c9C92b0C2  →  3 yrs 212 days ago
+tx: 0xa662365078f1e4458621c1443842e409c60e4201ce082429343944a817b5cba6</pre>
+
+<p>Recent inbound funding (within hours of this review):</p>
+
+<pre>OKX: Hot Wallet 3 (0xa9ac43f5b5e38155a288d1a01d2cbc4478e14573)
+→ 4.56M wei (~0.0046 ETH)</pre>
+
+<p>On-chain swaps recently route through <strong>OKX: Dex Router 3</strong> (<code>0x6088d94c…</code>).</p>
+
+<p>The laundering hub <code>0xee16…7ac3</code> does <strong>not</strong> appear in either the 50 oldest or 30 newest mainnet transactions sampled, nor in the 50 most recent ERC-20 transactions. It is also <strong>not</strong> the "Funded By" address.</p>
+
+<h3>Native balances (free-tier chains)</h3>
+
+<table>
+  <thead><tr><th>Chain</th><th>ChainID</th><th>Balance</th><th>USD (~)</th></tr></thead>
+  <tbody>
+    <tr><td>Ethereum</td><td>1</td><td>0.00000640 ETH</td><td>$0.02</td></tr>
+    <tr><td>Polygon</td><td>137</td><td>0.667 MATIC</td><td>$0.30</td></tr>
+    <tr><td>Arbitrum One</td><td>42161</td><td>0.0000861 ETH</td><td>$0.26</td></tr>
+    <tr><td>Linea</td><td>59144</td><td>0.0000786 ETH</td><td>$0.24</td></tr>
+    <tr><td>Gnosis</td><td>100</td><td>0.00905 xDAI</td><td>$0.009</td></tr>
+  </tbody>
+</table>
+
+<p>Multichain dust is the hallmark of a long-running personal wallet.</p>
+
+<h3>Protocol footprint (legitimate DeFi)</h3>
+
+<table>
+  <thead><tr><th>Surface</th><th>Evidence</th></tr></thead>
+  <tbody>
+    <tr><td>Aave V3</td><td><code>depositETH(onBehalfOf)</code> to <code>0xabea9132…</code> (WETH gateway), 2022 + 2023</td></tr>
+    <tr><td>zkSync</td><td><code>requestL2Transaction(...)</code> to <code>0x32400084…</code> (zkSync L1 contract), 2023</td></tr>
+    <tr><td>Uniswap</td><td>Universal Router swaps via <code>0x3fc91a3a…</code>, 2023</td></tr>
+    <tr><td>1inch</td><td>Aggregator V6 (<code>0x111111125…</code>) <code>swap()</code> calls, 2026</td></tr>
+    <tr><td>OpenSea Seaport</td><td><code>fulfillAvailableAdvancedOrders</code>, <code>matchAdvancedOrders</code>, recurring 2025–2026</td></tr>
+    <tr><td>Curve / Usual.money</td><td>LP in USD0/USD0++ pool with <code>remove_liquidity</code> exits</td></tr>
+    <tr><td>Layer3</td><td>L3 staking with <code>getReward()</code> claims</td></tr>
+    <tr><td>Ethscriptions / "ESC-20 tom"</td><td>Self-tx inscription mints, 2023</td></tr>
+    <tr><td>NFT mints</td><td><code>publicMint</code>, <code>mintPublic</code>, <code>mintSigned</code>, multiple collections</td></tr>
+    <tr><td>Hypersnap (SNAP)</td><td>High-frequency <code>0x17ca7810</code> claim attempts (points farming)</td></tr>
+  </tbody>
+</table>
+
+<h3>Tokens held / traded</h3>
+
+<p>USDT, USDC, WETH, SAND (The Sandbox), L3 (Layer3), Anoma (XAN), bUSD0/USD0/USD0++, Hypersnap (SNAP), Unisato (uSATO), GENECORE (GENE), AI Coin (AIC), Espresso (ESP).</p>
+
+<p>Plus dozens of unsolicited spam tokens — Trump Doge, Pikachu, Bad Dad, Bit Doge, Royal Doge, Brave Bear, Good Dog, Trump Mask, Royal Dog, Trump Shib, Trump Wars, Trump Rekt, Little Dog, Trump Dog. These are airdrop scams targeting any active mainnet wallet; their presence is <strong>not</strong> indicative of fraud-ring participation.</p>
+
+<blockquote class="success">
+  No DRB, no BankrBot tokens, no Base-side LPs in any sample taken.
+</blockquote>
+
+<h2 id="update">What to update in the prior report</h2>
+
+<p>Strike <code>0x19745f6d…</code> (xdath.eth) from the "Cluster wallets" table in the prior BankrBot/Grok report and add a footnote citing this review.</p>
+
+<p>The other wallets in that table should be re-checked against the rules below. Wallets that predate the BankrBot incident, or that were originally funded by a CEX rather than the hub, are likely also false positives.</p>
+
+<h3>Rules for cluster inclusion (going forward)</h3>
+
+<p>A wallet should be added to the cluster only if <strong>at least two</strong> of the following are true:</p>
+
+<ol>
+  <li>The hub's transfer to it is its <strong>first inbound tx</strong> (the hub created the wallet).</li>
+  <li>Wallet is <strong>&lt; 30 days old</strong> at the time of the hub interaction.</li>
+  <li>Wallet has <strong>touched the same Base-side fraud token</strong> (DRB or successor).</li>
+  <li>Wallet <strong>pushes value back</strong> to the hub or to a known burner.</li>
+</ol>
+
+<p><code>xdath.eth</code> satisfies none of these.</p>
+
+<h2 id="caveats">Caveats</h2>
+
+<ul>
+  <li><strong>Free tier blind spot.</strong> Etherscan V2 free does not cover Base, Optimism, BSC, or Avalanche. There could be Base-side activity tying this wallet to the BankrBot incident that we cannot see. The Etherscan MCP follows the same tier, so it would not help. A paid Lite plan would close this gap.</li>
+  <li><strong>Sample, not full pull.</strong> We sampled the 50 oldest, 30 newest, and 50 most recent ERC-20 transactions out of 527 total mainnet txs. A direct hub→wallet tx could exist in the middle and not have shown up. Even so, one stale dust transfer would not change the verdict given the wallet's age, CEX funding, and DeFi profile.</li>
+  <li><strong>Private name tags unread.</strong> Etherscan's address page didn't surface any private name tags or warning labels for this wallet.</li>
+</ul>
+
+<h2 id="sources">Source links</h2>
+
+<ul>
+  <li><a href="https://etherscan.io/address/0x19745f6d7a0ec2585c9a00245da657a9895a9f27">Etherscan: xdath.eth</a></li>
+  <li><a href="https://etherscan.io/address/0xee160757793c9d1721170c42ad363794a4347ac3">Etherscan: laundering hub</a></li>
+  <li><a href="./bankrbot-grok-heist-2026-05-04.html">Prior report — BankrBot/Grok heist</a></li>
+  <li><a href="https://docs.etherscan.io/etherscan-v2/getting-started/supported-chains">Etherscan V2 — supported chains and free/paid tiering</a></li>
+</ul>
+
+<footer>
+  Prepared with Etherscan V2 free tier via MCP. This review supersedes the xdath.eth entry in the prior BankrBot/Grok heist report. To convert to PDF, use your browser's "Print → Save as PDF" with default A4 settings.
+</footer>
+
+</body>
+</html>

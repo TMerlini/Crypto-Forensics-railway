@@ -187,7 +187,14 @@
   <!-- REPORTS TAB (canvas-style snapshot + Cursor Canvas export) ========= -->
   <section class="panel" data-panel="reports">
     <h2>Reports</h2>
-    <p class="hint">Console-quality snapshot of your latest trace: stats and asset tables in a tight layout similar to a <strong>Cursor Canvas</strong>. For the live IDE canvas (beside chat), download the filled file below and save it as <code class="mono-inline">trace-search-report.canvas.tsx</code> under your workspace <code class="mono-inline">canvases/</code> folder.</p>
+    <p class="hint">Curated investigations ship from <code class="mono-inline">reports/</code> (HTML + Markdown). Below that: a live <strong>trace snapshot</strong> from your current browser session (stats / tables). Download a filled <code class="mono-inline">trace-search-report.canvas.tsx</code> for Cursor Canvas beside chat.</p>
+
+    <h3 class="reports-section-title">Written analyses</h3>
+    <div id="reports-library">Loading…</div>
+
+    <hr class="reports-divider" />
+
+    <h3 class="reports-section-title">Latest trace snapshot</h3>
     <div id="reports-root"></div>
   </section>
 

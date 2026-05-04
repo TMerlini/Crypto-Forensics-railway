@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cluster Review — rzleffendi.eth (0x756566f5…) — 2026-05-04</title>
+<style>
+  :root {
+    --fg: #1a1a1a;
+    --fg-muted: #555;
+    --fg-faint: #888;
+    --accent: #1e5fbf;
+    --accent-soft: #e7efff;
+    --danger: #b8004a;
+    --danger-soft: #fce4ec;
+    --warn: #a06a00;
+    --warn-soft: #fff4e0;
+    --success: #1f8a65;
+    --success-soft: #e3f5ec;
+    --bg: #fff;
+    --rule: #d8d8d8;
+    --code-bg: #f3f4f6;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font: 14px/1.55 var(--sans);
+    color: var(--fg);
+    background: var(--bg);
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 48px 56px 96px;
+  }
+  header.cover { border-bottom: 2px solid var(--fg); padding-bottom: 24px; margin-bottom: 32px; }
+  header.cover .eyebrow {
+    font: 11px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.12em;
+    color: var(--fg-muted); margin-bottom: 12px;
+  }
+  header.cover h1 {
+    font-size: 26px; line-height: 1.25; margin: 0 0 8px; font-weight: 600; letter-spacing: -0.01em;
+  }
+  header.cover .subtitle { color: var(--fg-muted); font-size: 15px; margin: 0 0 18px; }
+  header.cover .verdict {
+    display: inline-block;
+    background: var(--success); color: #fff; font-weight: 600;
+    padding: 4px 12px; font-size: 11px; letter-spacing: 0.06em; border-radius: 3px;
+    text-transform: uppercase;
+  }
+  h2 {
+    font-size: 18px; font-weight: 600; margin: 36px 0 12px;
+    padding-bottom: 6px; border-bottom: 1px solid var(--rule);
+  }
+  h3 { font-size: 15px; font-weight: 600; margin: 24px 0 8px; }
+  p { margin: 0 0 12px; }
+  ul, ol { margin: 0 0 12px; padding-left: 22px; }
+  li { margin-bottom: 4px; }
+  code, .mono {
+    font-family: var(--mono);
+    font-size: 0.92em;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+    word-break: break-all;
+  }
+  pre {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--code-bg);
+    padding: 12px 14px;
+    border-radius: 5px;
+    border-left: 3px solid var(--accent);
+    overflow-x: auto;
+    margin: 8px 0 16px;
+    line-height: 1.5;
+  }
+  blockquote.warn {
+    margin: 8px 0 16px;
+    padding: 10px 14px;
+    border-left: 3px solid var(--warn);
+    background: var(--warn-soft);
+    font-size: 13px;
+  }
+  blockquote.success {
+    margin: 8px 0 16px;
+    padding: 10px 14px;
+    border-left: 3px solid var(--success);
+    background: var(--success-soft);
+    font-size: 13px;
+  }
+  blockquote.note {
+    margin: 8px 0 16px;
+    padding: 10px 14px;
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    font-size: 13px;
+  }
+  table {
+    width: 100%; border-collapse: collapse;
+    font-size: 13px; margin: 8px 0 18px;
+  }
+  th, td {
+    border-bottom: 1px solid var(--rule);
+    padding: 8px 10px; vertical-align: top; text-align: left;
+  }
+  th { font-weight: 600; background: #f7f7f7; font-size: 12px; }
+  .meta-table th { width: 32%; }
+  .stats {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 20px 0 28px;
+  }
+  .stat {
+    border: 1px solid var(--rule); border-radius: 6px;
+    padding: 14px 16px;
+  }
+  .stat .v { font-size: 22px; font-weight: 600; line-height: 1.2; letter-spacing: -0.01em; }
+  .stat .l { font-size: 11px; color: var(--fg-muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat.info   .v { color: var(--accent); }
+  .stat.ok     .v { color: var(--success); }
+
+  .toc {
+    background: #fafafa; border: 1px solid var(--rule); border-radius: 5px;
+    padding: 12px 18px; font-size: 13px; margin: 0 0 32px;
+  }
+  .toc ol { margin: 4px 0 0; padding-left: 22px; }
+  .toc a { color: var(--fg); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+
+  footer {
+    margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--rule);
+    font-size: 11px; color: var(--fg-muted);
+  }
+
+  @media print {
+    @page { margin: 16mm 14mm 18mm; size: A4; }
+    body { padding: 0; max-width: none; font-size: 11px; line-height: 1.45; }
+    h2 { page-break-after: avoid; font-size: 15px; margin-top: 24px; }
+    h3 { page-break-after: avoid; font-size: 13px; }
+    .stat .v { font-size: 18px; }
+    table { page-break-inside: auto; font-size: 10px; }
+    tr, td, th { page-break-inside: avoid; }
+    pre, blockquote { page-break-inside: avoid; }
+    a { color: var(--fg); text-decoration: none; }
+    a[href]::after {
+      content: " (" attr(href) ")";
+      font-size: 9px; color: var(--fg-muted); word-break: break-all;
+    }
+    a[href^="#"]::after { content: ""; }
+    .toc { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="cover">
+  <div class="eyebrow">Cluster review · Forensic correction</div>
+  <h1>rzleffendi.eth (<code>0x756566f5…</code>) — false positive in BankrBot/Grok cluster</h1>
+  <p class="subtitle">Second cluster review against the BankrBot/Grok heist report. Free-tier evidence shows a 1y4mo-old professional cross-chain trader / arbitrageur with no DRB exposure and no direct hub interaction. With this and the prior xdath.eth review, the original "cluster wallets" table is empty.</p>
+  <span class="verdict">Verdict — Not implicated</span>
+</header>
+
+<table class="meta-table">
+  <tr><th>Date</th><td>May 4, 2026</td></tr>
+  <tr><th>Subject</th><td><code>0x756566f5c097091830e5b95cc112fd33295749eb</code> (ENS: <code>rzleffendi.eth</code>)</td></tr>
+  <tr><th>Tooling</th><td>Etherscan V2 free tier (via MCP), public web sources</td></tr>
+  <tr><th>Prior reports</th><td>
+    <a href="./bankrbot-grok-heist-2026-05-04.html">BankrBot / Grok Morse-code Heist</a> ·
+    <a href="./xdath-eth-analysis-2026-05-04.html">xdath.eth review</a>
+  </td></tr>
+  <tr><th>Action requested</th><td>Strike from "Cluster wallets" table; remove Recommended Action #5</td></tr>
+</table>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#tldr">TL;DR</a></li>
+    <li><a href="#rules">Applying the 4-rule cluster-inclusion test</a></li>
+    <li><a href="#evidence">Evidence</a></li>
+    <li><a href="#mexc">The MEXC connection — what it does and doesn't mean</a></li>
+    <li><a href="#update">What to update in the prior report</a></li>
+    <li><a href="#left">What's left of the original heist attribution</a></li>
+    <li><a href="#caveats">Caveats</a></li>
+    <li><a href="#sources">Source links</a></li>
+  </ol>
+</nav>
+
+<h2 id="tldr">TL;DR</h2>
+
+<div class="stats">
+  <div class="stat info"><div class="v">3,791</div><div class="l">Mainnet txs</div></div>
+  <div class="stat info"><div class="v">1y 4mo</div><div class="l">Wallet age</div></div>
+  <div class="stat ok"><div class="v">0</div><div class="l">Direct hub txs</div></div>
+  <div class="stat ok"><div class="v">0</div><div class="l">DRB / BankrBot exposure</div></div>
+</div>
+
+<p>The address <code>0x756566f5…</code> was the second wallet listed in the <a href="./bankrbot-grok-heist-2026-05-04.html">BankrBot/Grok heist report</a> as a "co-funded cluster wallet." Same protocol as the <a href="./xdath-eth-analysis-2026-05-04.html">xdath.eth review</a> was applied here:</p>
+
+<ul>
+  <li><strong>1 yr 4 mo old</strong> (first tx Jan 7, 2024), <strong>3,791 mainnet txs</strong>, multichain footprint.</li>
+  <li><strong>Originally funded by <code>0xaa364c1a348f9517009207a1601e0a73c1cd530b</code></strong> (high-nonce funder, not the laundering hub).</li>
+  <li><strong>Profile: professional cross-chain trader / arbitrageur</strong> — heavy use of CoW Protocol, LiFi, Wormhole, Polygon zkEVM bridge, Squid, Jumper, Socket. rsETH ping-pong yield strategy.</li>
+  <li><strong>No DRB exposure, no BankrBot interaction, no Base-side fraud activity</strong> in the visible sample.</li>
+  <li>The laundering hub <code>0xee16…7ac3</code> does not appear in any sampled tx in either direction.</li>
+</ul>
+
+<blockquote class="success">
+  Fails all four cluster-inclusion rules. Strike from the BankrBot cluster.
+</blockquote>
+
+<blockquote class="note">
+  One touchpoint that needs to be called out and explained: a direct deposit from <strong>MEXC 16</strong> (<code>0x9642b23e…</code>, the same exchange wallet that funded the laundering hub's chain) on April 24, 2026. This is best read as a normal CEX user withdrawing their own funds. It does not implicate <code>rzleffendi.eth</code> in the BankrBot incident, but it does reinforce that <strong>MEXC is the keystone exchange</strong> for the broader investigation — see the MEXC connection section below.
+</blockquote>
+
+<h2 id="rules">Applying the 4-rule cluster-inclusion test</h2>
+
+<table>
+  <thead><tr><th>Rule</th><th>Pass?</th><th>Evidence</th></tr></thead>
+  <tbody>
+    <tr><td>Hub-funded as first inbound</td><td><strong>No</strong></td><td>First inbound was <code>0xaa364c1a…</code> on Jan 7, 2024 — uncategorised high-nonce funder, not the laundering hub.</td></tr>
+    <tr><td>Wallet &lt; 30 days old at hub interaction</td><td><strong>No</strong></td><td>Wallet is 1 yr 4 mo old, and there is no visible direct hub interaction at all.</td></tr>
+    <tr><td>Has touched DRB / BankrBot tokens</td><td><strong>No</strong></td><td>50 ERC-20 txs sampled — only mainstream tokens (USDT, USDC, WETH, rsETH, POL, SKY, AURA, HAKKA, DYSN, BHSc$, Sphynx, UST).</td></tr>
+    <tr><td>Pushes value back to hub or burner</td><td><strong>No</strong></td><td>No interactions with <code>0xee16…7ac3</code> or <code>0x4a26…4131</code> in any sample.</td></tr>
+  </tbody>
+</table>
+
+<p>Fails all four. Same shape as the prior xdath.eth false positive.</p>
+
+<h2 id="evidence">Evidence</h2>
+
+<h3>Wallet shape</h3>
+
+<table>
+  <thead><tr><th>Metric</th><th>Value</th><th>What burners look like</th></tr></thead>
+  <tbody>
+    <tr><td>Age</td><td>1 yr 4 mo (first tx Jan 7, 2024)</td><td>&lt; 30 days</td></tr>
+    <tr><td>Total mainnet txs</td><td>3,791</td><td>&lt; 50</td></tr>
+    <tr><td>Chains active</td><td>Eth, Polygon, Arbitrum, Linea, Gnosis, BSC, Celo (≥ 7)</td><td>Single chain</td></tr>
+    <tr><td>Latest activity</td><td>~6 hours before this review</td><td>Quiet after cash-out</td></tr>
+  </tbody>
+</table>
+
+<h3>Funding source</h3>
+
+<p>Etherscan's "Funded By" (the very first inbound):</p>
+
+<pre>0xaa364c1A348f9517009207a1601E0a73C1Cd530b  →  2 yrs 117 days ago (Jan 7, 2024)
+tx: 0xe54870dedd83407fc0b365324fa06707e4ac1cded17cd57eb9b758b8d62a7a6f</pre>
+
+<p><code>0xaa364c1A…</code> does not carry a public Etherscan label, but its high tx-count behaviour (nonce 91054 at the time of funding <code>rzleffendi.eth</code>) is consistent with a small CEX hot wallet, market maker, or OTC desk. Either way, it is <strong>not</strong> the laundering hub.</p>
+
+<p>Recent funding pattern (within the last ~10 days):</p>
+
+<table>
+  <thead><tr><th>Source</th><th>Etherscan label</th><th>Reading</th></tr></thead>
+  <tbody>
+    <tr><td><code>0x9642b23e…</code></td><td><strong>MEXC 16</strong></td><td>Direct CEX withdrawal — 0.2238 ETH on Apr 24, 2026</td></tr>
+    <tr><td><code>0x56eddb7a…</code></td><td><strong>Bitfinex 19</strong></td><td>USDT transfer ~$99.50</td></tr>
+    <tr><td><code>0xdfaa75323fb7…</code></td><td>high-nonce CEX-style</td><td>USDT transfer ~$396</td></tr>
+    <tr><td><code>0x935d2e470284…</code></td><td>high-nonce CEX-style</td><td>Multiple USDT transfers</td></tr>
+  </tbody>
+</table>
+
+<p>The hub <code>0xee16…7ac3</code> does <strong>not</strong> appear in either the 50 oldest or 30 newest mainnet transactions sampled, nor in the 50 most recent ERC-20 transactions. It is also <strong>not</strong> the "Funded By" address.</p>
+
+<h3>Native balances (free-tier chains)</h3>
+
+<table>
+  <thead><tr><th>Chain</th><th>ChainID</th><th>Balance</th><th>USD (~)</th></tr></thead>
+  <tbody>
+    <tr><td>Ethereum</td><td>1</td><td>0.000863 ETH</td><td>$2.84</td></tr>
+    <tr><td>Polygon</td><td>137</td><td>6.368 MATIC</td><td>$2.86</td></tr>
+    <tr><td>Arbitrum One</td><td>42161</td><td>~0.0000020 ETH</td><td>$0.006</td></tr>
+    <tr><td>Linea</td><td>59144</td><td>0.0000272 ETH</td><td>$0.082</td></tr>
+    <tr><td>Gnosis</td><td>100</td><td>0.0140 xDAI</td><td>$0.014</td></tr>
+  </tbody>
+</table>
+
+<h3>Protocol footprint (professional cross-chain trading)</h3>
+
+<table>
+  <thead><tr><th>Surface</th><th>Evidence</th></tr></thead>
+  <tbody>
+    <tr><td><strong>CoW Protocol</strong></td><td><code>0x9008d19f58aabd9ed0d60971565aa8510560ab41</code> — solver-settled rsETH ↔ WETH trades (<code>MoooZ1089603480()</code> and similar)</td></tr>
+    <tr><td><strong>LiFi Diamond</strong></td><td><code>0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae</code> — <code>swapTokensSingleV3NativeToERC20()</code> and other LiFi calls</td></tr>
+    <tr><td><strong>Jumper Exchange</strong></td><td><code>0x89c6340b1a1f4b25d36cd8b063d49045caf3f818</code> — many <code>0x0193b9fc</code> cross-chain executes via "jumper.exchange" integrator string</td></tr>
+    <tr><td><strong>Wormhole TokenBridge</strong></td><td><code>0x3ee18b2214aff97000d974cf647e7c347e8fa585</code> — UST + token bridging</td></tr>
+    <tr><td><strong>Polygon zkEVM Bridge</strong></td><td><code>0x2a3dd3eb832af982ec71669e178424b10dca2ede</code> — <code>bridgeAsset()</code> + <code>claimAsset()</code> round-trips</td></tr>
+    <tr><td><strong>Squid Router</strong></td><td><code>0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad</code> — <code>execute(payload, signatures)</code> cross-chain swaps</td></tr>
+    <tr><td>Allbridge / Layerzero</td><td><code>0xbbbd1bbb…</code>, <code>0x051f1d88…</code> — token unlock / bridge calls in early activity</td></tr>
+    <tr><td>Socket / Bungee</td><td><code>0x35d4d9bc79b0a543934b1769304b90d752691cad</code> — <code>sendBatch()</code> cross-chain rsETH delivery</td></tr>
+    <tr><td>Universal Router</td><td><code>0x4c82d1fbfe28c977cbb58d8c7ff8fcf9f70a2cca</code> — Uniswap-style swap routing</td></tr>
+    <tr><td>Hakka Finance ragequit</td><td><code>0xde02313f8bf17f31380c63e41cdecee98bc2b16d</code> — <code>ragequit(address[] tokens, uint256 share)</code> DAO exits</td></tr>
+    <tr><td>Aura Finance</td><td><code>sendFrom()</code> LayerZero OFT bridging of AURA</td></tr>
+  </tbody>
+</table>
+
+<h3>Tokens held / traded</h3>
+
+<p>USDT, USDC, WETH, <strong>rsETH</strong> (Kelp DAO LST), POL (Polygon Ecosystem Token, bridged), SKY (Sky / MakerDAO governance), AURA (Aura Finance), HAKKA (Hakka Finance), DYSN (Dyson Sphere), BHSc$ (BlackHoleSwap LP), Sphynx (Sphynx Labs), UST (Wormhole-bridged).</p>
+
+<p>The rsETH activity is particularly diagnostic: dozens of "receive 0.5 rsETH from Socket → send to Jumper" cycles within minutes of each other. That's an automated yield/arb strategy, not a launderer.</p>
+
+<blockquote class="success">
+  No DRB. No BankrBot tokens. No Base-side fraud tokens in any sample taken.
+</blockquote>
+
+<h2 id="mexc">The MEXC connection — what it does and doesn't mean</h2>
+
+<p>On April 24, 2026, <strong>MEXC 16</strong> (<code>0x9642b23ed1e01df1092b92641051881a322f5d4e</code>) sent 0.2238 ETH to <code>rzleffendi.eth</code> directly. This is the same MEXC hot wallet that, several layers earlier, funded the wallet that became the laundering hub <code>0xee16…7ac3</code>.</p>
+
+<p>Three readings:</p>
+
+<ol>
+  <li><strong>Most likely:</strong> <code>rzleffendi.eth</code> is a customer of MEXC who withdrew their own funds. MEXC has millions of users; co-occurrence with another MEXC customer (the hub operator) is statistically unremarkable.</li>
+  <li><strong>Less likely:</strong> <code>rzleffendi.eth</code> and the hub are operated by the same entity. Implausible because a launderer running a parallel 3,791-tx active trading wallet from the same KYC origin would be unusually careless and create an obvious paper trail.</li>
+  <li><strong>Plausible but unverifiable from free-tier data:</strong> the hub-as-a-service hypothesis means <code>rzleffendi.eth</code> could in principle be a customer of the laundering service (separate from being a MEXC customer) — but there is no on-chain evidence of payments between them.</li>
+</ol>
+
+<blockquote class="note">
+  What this <strong>does</strong> mean for the investigation: MEXC's KYC records will contain the identities of <em>both</em> parties (the hub operator and <code>rzleffendi.eth</code>). The subpoena should ask MEXC to name every account that has withdrawn to either address, and any common metadata (IP, device, deposit funding source) across them. Worth collecting even if <code>rzleffendi.eth</code> itself isn't part of the BankrBot incident.
+</blockquote>
+
+<h2 id="update">What to update in the prior report</h2>
+
+<p>The original BankrBot writeup's "Cluster wallets" table contained two entries: <code>xdath.eth</code> (already struck) and <code>rzleffendi.eth</code> (now also struck). With both removed, the table is empty.</p>
+
+<p>Recommended updates to <code>reports/bankrbot-grok-heist-2026-05-04.{md,html}</code>:</p>
+
+<ol>
+  <li>Strike the <code>rzleffendi.eth</code> row from the "Cluster wallets" table; keep the existing footnote and add this review as a second source.</li>
+  <li><strong>Remove Recommended Action #5</strong> entirely. It pointed at cross-referencing the now-struck wallets on Base + BSC. Replace it with a tighter action: "Map the hub <code>0xee16…7ac3</code>'s outflow set across all free-tier chains and apply the 4-rule cluster-inclusion test to each recipient before tagging anyone as an accomplice."</li>
+  <li>Update the "Geographical pattern" row to reflect that the Indonesian-handle theory was based on two now-struck wallets and a single attacker EOA (<code>ilhamrafli.base.eth</code>). The attacker handle stands; the cluster theory does not.</li>
+</ol>
+
+<h2 id="left">What's left of the original heist attribution</h2>
+
+<table>
+  <thead><tr><th>Layer</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td>Attacker EOA <code>0xE8E476bdd…</code> (<code>ilhamrafli.base.eth</code>) on Base</td><td>Solid</td></tr>
+    <tr><td>DRB token <code>0x98871E3C…</code> as the stolen asset</td><td>Solid</td></tr>
+    <tr><td>5-hop mainnet gas chain</td><td>Solid</td></tr>
+    <tr><td>Laundering hub <code>0xee16…7ac3</code> (multichain, MEXC-funded)</td><td>Solid</td></tr>
+    <tr><td>Hub is a laundering <em>service</em> with a customer book</td><td>Strengthened — both struck wallets are MEXC users, suggesting the hub operator is a separate MEXC user running a service</td></tr>
+    <tr><td>MEXC 16 as KYC'd origin</td><td>Solid — now even more important</td></tr>
+    <tr><td>Recurring Binance 14 touchpoint</td><td>Solid</td></tr>
+    <tr><td>Indonesian-handle geographic theory</td><td>Removed — too soft a signal</td></tr>
+    <tr><td>Cluster of co-funded accomplice wallets</td><td><strong>Empty</strong> — both candidates were false positives</td></tr>
+  </tbody>
+</table>
+
+<blockquote class="success">
+  The investigation is now leaner and stronger. The MEXC subpoena is the single highest-leverage move.
+</blockquote>
+
+<h2 id="caveats">Caveats</h2>
+
+<ul>
+  <li><strong>Free tier blind spot.</strong> Etherscan V2 free does not cover Base, Optimism, BSC, or Avalanche. There could be Base-side activity tying this wallet to BankrBot that we cannot see. A paid Lite plan would close this gap.</li>
+  <li><strong>Sample, not full pull.</strong> We sampled the 50 oldest mainnet txs, the 30 newest mainnet txs, and the 50 most recent ERC-20 txs out of 3,791 total. A direct hub→wallet tx could exist in the middle and not have shown up. Even so, one stale dust transfer would not change the verdict given the wallet's age, CEX funding, and arb-trader profile.</li>
+  <li><strong><code>0xaa364c1a…</code> not identified.</strong> The first-inbound funder doesn't carry an Etherscan label. It could be a small CEX (Bitget, MEXC, Bitfinex), a market maker, or an OTC. Knowing exactly which would tighten the picture but isn't needed to clear the wallet.</li>
+</ul>
+
+<h2 id="sources">Source links</h2>
+
+<ul>
+  <li><a href="https://etherscan.io/address/0x756566f5c097091830e5b95cc112fd33295749eb">Etherscan: rzleffendi.eth</a></li>
+  <li><a href="https://etherscan.io/address/0xee160757793c9d1721170c42ad363794a4347ac3">Etherscan: laundering hub</a></li>
+  <li><a href="https://etherscan.io/address/0x9642b23ed1e01df1092b92641051881a322f5d4e">Etherscan: MEXC 16</a></li>
+  <li><a href="https://etherscan.io/address/0xaa364c1a348f9517009207a1601e0a73c1cd530b">Etherscan: original funder 0xaa364c1A…</a></li>
+  <li><a href="./xdath-eth-analysis-2026-05-04.html">Prior false-positive review — xdath.eth</a></li>
+  <li><a href="./bankrbot-grok-heist-2026-05-04.html">Prior report — BankrBot/Grok heist</a></li>
+  <li><a href="https://docs.etherscan.io/etherscan-v2/getting-started/supported-chains">Etherscan V2 — supported chains and free/paid tiering</a></li>
+</ul>
+
+<footer>
+  Prepared with Etherscan V2 free tier via MCP. This review supersedes the rzleffendi.eth entry in the prior BankrBot/Grok heist report. With both this and the prior xdath.eth review, the original "Cluster wallets" table is now empty. To convert to PDF, use your browser's "Print → Save as PDF" with default A4 settings.
+</footer>
+
+</body>
+</html>

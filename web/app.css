@@ -296,6 +296,53 @@ button.danger:hover:not(:disabled) { background: rgba(255, 107, 107, 0.1); }
   padding-left: 1.1rem;
 }
 .reports-summary-lines li { margin-bottom: 0.25rem; }
+
+.reports-library-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+.reports-library-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+.reports-library-slug {
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-all;
+}
+.reports-library-meta {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.reports-library-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.reports-library-actions a.button-link {
+  display: inline-block;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+.reports-library-actions a.button-link:hover {
+  border-color: var(--accent);
+  background: #202838;
+}
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
