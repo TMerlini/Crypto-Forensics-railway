@@ -26,6 +26,7 @@ import { analyze } from "./report.mjs";
 import { writeReports } from "./report.mjs";
 import { composeBundle, simulateRescue, submitRescue } from "./rescue.mjs";
 import { buildersForChain } from "./builders.mjs";
+import { extendChain } from "./extend-chain.mjs";
 
 // Server boots without any required env — both the API key and the scam address
 // can be entered in the UI per-request. We just warn if they are missing so the
@@ -102,6 +103,7 @@ const server = createServer(async (req, res) => {
       const id = p.split("/").pop();
       return sendReport(id, res);
     }
+    if (req.method === "POST" && p === "/api/trace/extend-chain") return extendChainRoute(req, res);
 
     if (req.method === "POST" && p === "/api/rescue/compose") return rescueCompose(req, res);
     if (req.method === "POST" && p === "/api/rescue/simulate") return rescueSimulate(req, res);
@@ -248,6 +250,41 @@ function sendReport(id, res) {
   const path = join(outDir, `${id}.json`);
   if (!existsSync(path)) return sendJson(res, { error: "not found" }, 404);
   sendFile(res, path);
+}
+
+// -----------------------------------------------------------------------------
+// /api/trace/extend-chain — walk further from the last hop of a gas-seed or
+// cash-out chain using live Etherscan calls. Lets users dig past the BFS
+// MAX_ADDRESSES / MAX_DEPTH caps without re-running the whole trace.
+// -----------------------------------------------------------------------------
+async function extendChainRoute(req, res) {
+  const body = await readJsonBody(req);
+  const apiKey = (body.apiKey?.trim?.() || env.apiKey || "").trim();
+  if (!apiKey) return sendJson(res, { error: "missing apiKey" }, 400);
+  if (!/^0x[0-9a-f]{40}$/i.test(body.startAddress ?? "")) {
+    return sendJson(res, { error: "invalid startAddress" }, 400);
+  }
+  const direction = body.direction === "backward" ? "backward" : body.direction === "forward" ? "forward" : null;
+  if (!direction) return sendJson(res, { error: "direction must be 'backward' or 'forward'" }, 400);
+  const chainId = Number(body.chainId ?? env.chainId);
+  const hops = clamp(Number(body.hops ?? 5), 1, 20);
+  const rps = clamp(Number(body.rps ?? env.rps), 1, 30);
+  const startHop = clamp(Number(body.startHop ?? 0), 0, 1000);
+
+  try {
+    const chain = await extendChain({
+      apiKey,
+      chainId,
+      startAddress: body.startAddress.toLowerCase(),
+      direction,
+      hops,
+      rps,
+      startHop,
+    });
+    sendJson(res, { chain });
+  } catch (err) {
+    sendJson(res, { error: err.shortMessage ?? err.message }, 500);
+  }
 }
 
 function writeSse(res, ev) {

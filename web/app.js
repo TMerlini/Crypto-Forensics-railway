@@ -37,6 +37,12 @@ $$(".tab").forEach((t) =>
 // ---------------------------------------------------------------------------
 let currentRunId = null;
 let currentTraceTarget = null;
+// Captured at form submit so the "Follow further" button can keep using the
+// same Etherscan API key + chain without re-prompting the user.
+let currentTraceParams = null;
+// The last analysis object handed to renderReport(). Mutated in place when
+// chains are extended via /api/trace/extend-chain.
+let currentAnalysis = null;
 let traceEs = null;
 
 $("#trace-form").addEventListener("submit", async (e) => {
@@ -59,6 +65,11 @@ $("#trace-form").addEventListener("submit", async (e) => {
 
   currentRunId = json.runId;
   currentTraceTarget = String(body.scamAddress).toLowerCase();
+  currentTraceParams = {
+    apiKey: body.apiKey ?? "",
+    chainId: body.chainId,
+    rps: body.rps,
+  };
   $("#trace-progress").classList.remove("hidden");
   $("#trace-report").classList.add("hidden");
   $("#trace-log").textContent = "";
@@ -103,7 +114,9 @@ function handleTraceEvent(ev, cap) {
   }
 }
 
-function renderReport(a, runId) {
+function renderReport(a, runId, opts = {}) {
+  const { scroll = true } = opts;
+  currentAnalysis = a;
   const el = $("#trace-report");
   el.classList.remove("hidden");
   el.innerHTML = "";
@@ -143,11 +156,11 @@ function renderReport(a, runId) {
   }
   // Gas-seed trail
   if (a.gasSeedChain?.length) {
-    el.appendChild(card("Attacker's gas-seed trail (first inflow → backwards)", chainTree(a.gasSeedChain, "first")));
+    el.appendChild(card("Attacker's gas-seed trail (first inflow → backwards)", chainPanel(a.gasSeedChain, "first", "backward")));
   }
   // Cash-out trail
   if (a.cashOutChain?.length) {
-    el.appendChild(card("Cash-out trail (biggest outflow → forwards)", chainTree(a.cashOutChain, "biggest")));
+    el.appendChild(card("Cash-out trail (biggest outflow → forwards)", chainPanel(a.cashOutChain, "biggest", "forward")));
   }
   // Cash-out endpoints
   if (a.cashOutEndpoints?.length) {
@@ -157,21 +170,25 @@ function renderReport(a, runId) {
   if (a.topEthFunders?.length) el.appendChild(card("Top ETH funders", addressList(a.topEthFunders, "eth")));
   if (a.topEthRecipients?.length) el.appendChild(card("Top ETH recipients", addressList(a.topEthRecipients, "eth")));
 
-  // Downloads
+  // Downloads — generate everything client-side from the analysis JSON we
+  // already have, so this works on hosted deploys with disk writes off.
   const dl = document.createElement("div");
-  dl.className = "card";
-  dl.innerHTML = `<h3>Files on disk</h3>
-    <p>All files are written to <code>forensics/out/${runId}.*</code>:</p>
-    <ul>
-      <li><code>${runId}.report.md</code> — this report as markdown</li>
-      <li><code>${runId}.json</code> — full graph as JSON</li>
-      <li><code>${runId}.inflows-to-target.csv</code> — file THIS with exchanges / IC3</li>
-      <li><code>${runId}.outflows-from-target.csv</code> — where the money went</li>
-      <li><code>${runId}.edges.csv</code>, <code>${runId}.nodes.csv</code> — full graph as CSV</li>
-    </ul>`;
+  dl.className = "card download-card";
+  dl.innerHTML = `<h3>Download report</h3>
+    <p class="hint" style="margin-top:-0.25rem">Share this with exchanges, police (IC3 / Action Fraud), or your own records.</p>
+    <div class="download-buttons">
+      <button type="button" class="primary" id="dl-md">Download Markdown (.md)</button>
+      <button type="button" id="dl-html">Download HTML (.html)</button>
+      <button type="button" id="dl-json">Download JSON (.json)</button>
+      <button type="button" id="dl-print">Print / Save as PDF</button>
+    </div>`;
   el.appendChild(dl);
+  $("#dl-md", dl).addEventListener("click", () => downloadFile(`trace-${shortAddr(currentTraceTarget)}.md`, buildMarkdownReport(a, currentTraceTarget, runId), "text/markdown"));
+  $("#dl-html", dl).addEventListener("click", () => downloadHtmlReport(a, currentTraceTarget, runId));
+  $("#dl-json", dl).addEventListener("click", () => downloadFile(`trace-${shortAddr(currentTraceTarget)}.json`, JSON.stringify({ target: currentTraceTarget, runId, generatedAt: new Date().toISOString(), params: currentTraceParams, analysis: a }, null, 2), "application/json"));
+  $("#dl-print", dl).addEventListener("click", () => window.print());
 
-  el.scrollIntoView({ behavior: "smooth", block: "start" });
+  if (scroll) el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function card(title, content) {
@@ -198,11 +215,17 @@ function assetTable(assets) {
 function chainTree(chain, mode) {
   const container = document.createElement("div");
   container.className = "chain";
+  // Indentation grows with hops, but we re-base from the first hop in the
+  // passed-in array so extended chains keep a sane left margin instead of
+  // marching off-screen.
+  const baseHop = chain[0]?.hop ?? 0;
   for (const h of chain) {
-    const indent = "&nbsp;&nbsp;".repeat(h.hop * 2);
+    const visualHop = Math.max(0, h.hop - baseHop);
+    const indent = "&nbsp;&nbsp;".repeat(visualHop * 2);
     const cat = h.label ? h.label.split(":")[0] : "";
     const line = document.createElement("div");
-    line.innerHTML = `${indent}<span class="hop ${cat}">↳ hop ${h.hop}: ${addrLink(h.address)}${h.label ? ` <strong>${escapeHtml(h.label)}</strong>` : ""}${h.isContract ? ` <em>(contract)</em>` : ""}</span>`;
+    const term = h.terminated ? ` <em class="muted">[${escapeHtml(h.terminated)}]</em>` : "";
+    line.innerHTML = `${indent}<span class="hop ${cat}">↳ hop ${h.hop}: ${addrLink(h.address)}${h.label ? ` <strong>${escapeHtml(h.label)}</strong>` : ""}${h.isContract ? ` <em>(contract)</em>` : ""}${term}</span>`;
     container.appendChild(line);
     const edge = mode === "first" ? h.firstInflow : h.biggestOutflow;
     if (edge) {
@@ -214,6 +237,110 @@ function chainTree(chain, mode) {
     }
   }
   return container;
+}
+
+// Wraps a chain tree with a "Follow further" button so users can dig past the
+// BFS depth/MAX_ADDRESSES caps without re-running the full trace.
+function chainPanel(chain, mode, direction) {
+  const wrap = document.createElement("div");
+  wrap.appendChild(chainTree(chain, mode));
+
+  const last = chain[chain.length - 1];
+  const lastEdge = mode === "first" ? last?.firstInflow : last?.biggestOutflow;
+  const isTerminal = !!last?.label && (last.label.startsWith("cex:") || last.label.startsWith("bridge:") || last.label.startsWith("mixer:"));
+
+  const controls = document.createElement("div");
+  controls.className = "chain-controls";
+
+  // Two scenarios:
+  //   1. Last hop has an edge → the next address is known but wasn't expanded
+  //      by the BFS. Walk forward from that next address starting at hop+1.
+  //   2. Last hop has NO edge → BFS never fetched txs for this address (the
+  //      common "cashout chain stops at hop 1" case). Walk from this address
+  //      itself starting at the same hop number, then merge over the dead-end
+  //      entry so the chain reads cleanly.
+  let startAddress = null;
+  let startHop = 0;
+  if (lastEdge) {
+    startAddress = direction === "backward" ? lastEdge.from : lastEdge.to;
+    startHop = last.hop + 1;
+  } else if (last && !isTerminal && !last.isContract) {
+    startAddress = last.address;
+    startHop = last.hop;
+  }
+
+  if (isTerminal) {
+    controls.innerHTML = `<span class="hint-inline">Trail terminates at a labelled origin — no further hops to follow.</span>`;
+  } else if (!startAddress) {
+    controls.innerHTML = `<span class="hint-inline">Nothing to follow further${last?.terminated ? ` (${escapeHtml(last.terminated)})` : ""}.</span>`;
+  } else {
+    controls.innerHTML = `
+      <button type="button" class="follow-further" data-direction="${direction}" data-start="${startAddress}" data-from-hop="${startHop}">Follow further (5 more hops)</button>
+      <span class="hint-inline">Live Etherscan calls. Walk starts at <code>${shortAddr(startAddress)}</code>.</span>
+      <span class="follow-status hint-inline" hidden></span>`;
+    controls.querySelector(".follow-further").addEventListener("click", (ev) => onFollowFurther(ev.currentTarget, controls.querySelector(".follow-status")));
+  }
+
+  wrap.appendChild(controls);
+  return wrap;
+}
+
+async function onFollowFurther(button, statusEl) {
+  if (!currentTraceParams) { alert("Trace params lost — re-run the trace."); return; }
+  const direction = button.dataset.direction;
+  const startAddress = button.dataset.start;
+  const startHop = Number(button.dataset.fromHop);
+
+  button.disabled = true;
+  statusEl.hidden = false;
+  statusEl.textContent = "Walking the chain via Etherscan…";
+
+  try {
+    const res = await fetch("/api/trace/extend-chain", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        apiKey: currentTraceParams.apiKey,
+        chainId: currentTraceParams.chainId,
+        rps: currentTraceParams.rps,
+        direction,
+        startAddress,
+        startHop,
+        hops: 5,
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+    if (!json.chain?.length) {
+      statusEl.textContent = "No further hops returned (dead end or all addresses already seen).";
+      return;
+    }
+
+    // Splice the new hops into the existing chain and re-render the report.
+    // Don't auto-scroll — the user is mid-research and shouldn't be yanked.
+    const key = direction === "backward" ? "gasSeedChain" : "cashOutChain";
+    const existing = currentAnalysis[key] ?? [];
+    // If the response's first hop overlaps the existing last hop (same hop
+    // number + same address), drop the existing dead-end entry — the new
+    // walk has the richer version with an outgoing edge.
+    let merged;
+    if (existing.length && json.chain.length) {
+      const a = existing[existing.length - 1];
+      const b = json.chain[0];
+      if (a.hop === b.hop && a.address.toLowerCase() === b.address.toLowerCase()) {
+        merged = existing.slice(0, -1).concat(json.chain);
+      } else {
+        merged = existing.concat(json.chain);
+      }
+    } else {
+      merged = (existing ?? []).concat(json.chain ?? []);
+    }
+    currentAnalysis[key] = merged;
+    renderReport(currentAnalysis, currentRunId, { scroll: false });
+  } catch (err) {
+    statusEl.textContent = `Failed: ${err.message}`;
+    button.disabled = false;
+  }
 }
 
 function endpointsList(eps) {
@@ -470,6 +597,191 @@ function buildGasSeedMermaid(chain, target) {
   for (let i = 0; i < chain.length; i++) addrIds.set(ids[i], chain[i].address);
   lines.push(...[...addrIds.entries()].map(([id, a]) => `click ${id} "https://etherscan.io/address/${a}" "Open on Etherscan" _blank`));
   return lines.join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// REPORT DOWNLOADS (Markdown / HTML / Print) — all client-side from analysis
+// ---------------------------------------------------------------------------
+function downloadFile(name, content, mime = "text/plain") {
+  const blob = new Blob([content], { type: `${mime};charset=utf-8` });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 0);
+}
+
+function buildMarkdownReport(a, target, runId) {
+  const L = [];
+  L.push(`# Sweeper Trace: \`${target}\``);
+  L.push("");
+  L.push(`Generated ${new Date().toISOString()}` + (runId ? ` · run \`${runId}\`` : ""));
+  if (currentTraceParams) {
+    L.push(`Chain ID \`${currentTraceParams.chainId}\` · rps \`${currentTraceParams.rps}\``);
+  }
+  L.push("");
+
+  L.push("## Totals");
+  L.push("");
+  L.push(`- Inflows: ${a.totals.inflowCount} (${a.totals.uniqueSendersToTarget} unique senders)`);
+  L.push(`- Outflows: ${a.totals.outflowCount} (${a.totals.uniqueRecipientsFromTarget} unique recipients)`);
+  L.push(`- Likely victims: ${a.totals.uniqueVictimAddresses}`);
+  L.push(`- Nodes discovered: ${a.totals.nodesDiscovered}`);
+  L.push(`- Edges discovered: ${a.totals.edgesDiscovered}`);
+  L.push(`- First inflow: ${a.totals.firstInflowAt ?? "(none)"}`);
+  L.push(`- Last inflow: ${a.totals.lastInflowAt ?? "(none)"}`);
+  L.push(`- First outflow: ${a.totals.firstOutflowAt ?? "(none)"}`);
+  L.push(`- Last outflow: ${a.totals.lastOutflowAt ?? "(none)"}`);
+  L.push("");
+
+  if (a.inflowsByAsset?.length) {
+    L.push("## Received by target (by asset)");
+    L.push("");
+    L.push(mdTable(["Symbol", "Amount", "Transfers", "Contract"], a.inflowsByAsset.map((x) => [x.symbol, x.amountFormatted, x.count, `\`${x.asset}\``])));
+    L.push("");
+  }
+  if (a.outflowsByAsset?.length) {
+    L.push("## Sent from target (by asset) — where the money went");
+    L.push("");
+    L.push(mdTable(["Symbol", "Amount", "Transfers", "Contract"], a.outflowsByAsset.map((x) => [x.symbol, x.amountFormatted, x.count, `\`${x.asset}\``])));
+    L.push("");
+  }
+  if (a.victimInflowsByAsset?.length) {
+    L.push("## Inflows from non-CEX senders (likely stolen from victims)");
+    L.push("");
+    L.push(mdTable(["Symbol", "Amount", "Transfers", "Contract"], a.victimInflowsByAsset.map((x) => [x.symbol, x.amountFormatted, x.count, `\`${x.asset}\``])));
+    L.push("");
+  }
+
+  L.push("## Attacker's gas-seed trail (first inflow → backwards)");
+  L.push("");
+  if (!a.firstInflow) {
+    L.push("_No inflows found._");
+  } else {
+    L.push(`- From: \`${a.firstInflow.from}\``);
+    L.push(`- When: ${a.firstInflow.time}`);
+    L.push(`- Amount: ${a.firstInflow.amount} ${a.firstInflow.asset}`);
+    L.push(`- Tx: https://etherscan.io/tx/${a.firstInflow.hash}`);
+    L.push("");
+    const base = a.gasSeedChain[0]?.hop ?? 0;
+    for (const h of a.gasSeedChain) {
+      const indent = "  ".repeat(Math.max(0, h.hop - base));
+      L.push(`${indent}↳ hop ${h.hop}: \`${h.address}\`${h.label ? ` — **${h.label}**` : ""}${h.isContract ? " _(contract)_" : ""}${h.terminated ? ` _[${h.terminated}]_` : ""}`);
+      if (h.firstInflow) {
+        L.push(`${indent}  • funded by \`${h.firstInflow.from}\` with ${h.firstInflow.amount} ${h.firstInflow.asset} on ${h.firstInflow.time} — [tx](https://etherscan.io/tx/${h.firstInflow.hash})`);
+      }
+    }
+  }
+  L.push("");
+
+  L.push("## Cash-out trail (biggest outflow → forwards)");
+  L.push("");
+  if (!a.cashOutChain?.length || (!a.cashOutChain[0].biggestOutflow && a.cashOutChain.length === 1)) {
+    L.push("_No outflows discovered._");
+  } else {
+    const base = a.cashOutChain[0]?.hop ?? 0;
+    for (const h of a.cashOutChain) {
+      const indent = "  ".repeat(Math.max(0, h.hop - base));
+      L.push(`${indent}↳ hop ${h.hop}: \`${h.address}\`${h.label ? ` — **${h.label}**` : ""}${h.isContract ? " _(contract)_" : ""}${h.terminated ? ` _[${h.terminated}]_` : ""}`);
+      if (h.biggestOutflow) {
+        L.push(`${indent}  • sent ${h.biggestOutflow.amount} ${h.biggestOutflow.asset} → \`${h.biggestOutflow.to}\` on ${h.biggestOutflow.time} — [tx](https://etherscan.io/tx/${h.biggestOutflow.hash})`);
+      }
+    }
+  }
+  L.push("");
+
+  L.push("## Cash-out endpoints (CEX / bridge / mixer)");
+  L.push("");
+  if (!a.cashOutEndpoints?.length) {
+    L.push("_None found._");
+  } else {
+    for (const ep of a.cashOutEndpoints) {
+      L.push(`- **${ep.category}:${ep.label}** — \`${ep.address}\``);
+      for (const t of Object.values(ep.totals ?? {})) {
+        L.push(`  - ${t.amountFormatted} ${t.symbol}`);
+      }
+    }
+  }
+  L.push("");
+
+  if (a.topEthFunders?.length) {
+    L.push("## Top ETH funders of the target");
+    L.push("");
+    L.push(mdTable(["#", "Address", "ETH", "Label"], a.topEthFunders.map((f, i) => [i + 1, `\`${f.address}\``, f.eth, f.label ?? ""])));
+    L.push("");
+  }
+  if (a.topEthRecipients?.length) {
+    L.push("## Top ETH recipients from the target");
+    L.push("");
+    L.push(mdTable(["#", "Address", "ETH", "Label"], a.topEthRecipients.map((f, i) => [i + 1, `\`${f.address}\``, f.eth, f.label ?? ""])));
+    L.push("");
+  }
+
+  L.push("## Next steps");
+  L.push("");
+  L.push("1. **Cash-out endpoints** — if the attacker deposited into a CEX, that exchange's compliance team has KYC on the attacker. File immediately with `abuse@<exchange>`, attach the inflow CSV.");
+  L.push("2. **Gas-seed trail** — if the *first* inflow chain ends at a CEX, that's the other half of the identity link (where the attacker withdrew the gas money from).");
+  L.push("3. Notify USDC (Circle) / USDT (Tether) if stablecoins are visible at any attacker-controlled address — they can freeze. Act within hours, not days.");
+  L.push("4. File with IC3 (US) / Action Fraud (UK) / your local cybercrime unit. Attach this report.");
+
+  return L.join("\n");
+}
+
+function mdTable(headers, rows) {
+  const h = `| ${headers.join(" | ")} |`;
+  const sep = `| ${headers.map(() => "---").join(" | ")} |`;
+  const body = rows.map((r) => `| ${r.map(mdCell).join(" | ")} |`).join("\n");
+  return [h, sep, body].join("\n");
+}
+function mdCell(v) { return String(v ?? "").replace(/\|/g, "\\|").replace(/\n/g, " "); }
+
+// Self-contained HTML download — clones the rendered report DOM (so the
+// Mermaid SVGs come along) and bundles the active stylesheet inline.
+function downloadHtmlReport(a, target, runId) {
+  const reportEl = $("#trace-report").cloneNode(true);
+  // Strip download / follow buttons from the export — they don't make sense
+  // in a static file.
+  $$(".download-card, .chain-controls, .graph-tabs button.graph-tab", reportEl).forEach((n) => {
+    if (n.classList.contains("graph-tab")) return; // keep tab labels for visual reference
+    n.remove();
+  });
+  // Make sure all graph panes are visible in the export — no JS to switch tabs
+  // in a static HTML file.
+  $$(".graph-pane", reportEl).forEach((p) => p.classList.remove("hidden"));
+
+  // Inline the current stylesheet text. We grab it from the rendered <link>
+  // elements; if the fetch fails (e.g., CORS) we fall back to the document's
+  // own computed styles.
+  const css = collectCssText();
+  const meta = `<meta charset="utf-8" /><title>Sweeper Trace ${escapeHtml(target)}</title>`;
+  const header = `<header style="padding:1.5rem 2rem;border-bottom:1px solid #242b3d;">
+    <div style="font-family:ui-monospace,Menlo,Consolas,monospace;color:#7ae1ff;font-size:0.85rem;">SWEEPER FORENSICS</div>
+    <h1 style="margin:0.25rem 0 0;font-size:1.4rem;">Trace report — ${escapeHtml(target)}</h1>
+    <div style="color:#8892a6;font-size:0.85rem;margin-top:0.25rem;">Generated ${new Date().toISOString()}${runId ? ` · run ${runId}` : ""}</div>
+  </header>`;
+  const html = `<!doctype html><html><head>${meta}<style>${css}</style><style>
+    body { background: #0a0d14; color: #e8ecf5; margin: 0; font: 14px/1.5 system-ui, -apple-system, sans-serif; }
+    main { max-width: 1100px; margin: 0 auto; padding: 1rem 2rem 3rem; }
+    .panel { display: block !important; }
+  </style></head><body>${header}<main>${reportEl.outerHTML}</main></body></html>`;
+  downloadFile(`trace-${shortAddr(target)}.html`, html, "text/html");
+}
+
+function collectCssText() {
+  const buf = [];
+  for (const sheet of document.styleSheets) {
+    try {
+      const rules = sheet.cssRules;
+      if (!rules) continue;
+      for (const r of rules) buf.push(r.cssText);
+    } catch {
+      // CORS-protected sheet (e.g., the CDN'd Mermaid). Skip — Mermaid SVG
+      // already has inline styles.
+    }
+  }
+  return buf.join("\n");
 }
 
 function buildCashOutMermaid(chain, target) {

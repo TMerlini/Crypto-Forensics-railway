@@ -290,6 +290,99 @@ td code { background: transparent; }
 .chain .hop.bridge { color: var(--warn); }
 .chain .hop.mixer { color: var(--danger); }
 .chain .tx { color: var(--muted); }
+.chain .muted { color: var(--muted); font-style: italic; }
+
+/* Follow further --------------------------------------------------- */
+.chain-controls {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.85rem;
+}
+.follow-further {
+  background: var(--panel-2);
+  color: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.3rem 0.75rem;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+.follow-further:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
+.follow-further:disabled { opacity: 0.5; cursor: wait; }
+
+/* Download card ---------------------------------------------------- */
+.download-buttons { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.download-buttons button {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+.download-buttons button:hover { border-color: var(--accent); color: var(--accent); }
+.download-buttons button.primary {
+  background: var(--accent);
+  color: #0a0d14;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.download-buttons button.primary:hover { filter: brightness(1.1); color: #0a0d14; }
+
+/* Print --- a clean, ink-friendly view for forensic reports ------ */
+@media print {
+  :root {
+    --bg: #fff;
+    --panel: #fff;
+    --panel-2: #f7f8fa;
+    --border: #ccd2db;
+    --text: #1a1f2e;
+    --muted: #4a5263;
+    --accent: #0050a0;
+    --accent-2: #1a7d3c;
+    --danger: #b8261d;
+    --warn: #8a5a00;
+  }
+  body { background: #fff; color: #1a1f2e; }
+  /* Hide everything except the trace report. */
+  header, .tabs, form, #trace-progress, .panel:not([data-panel="trace"]), .panel[data-panel="trace"] > h2,
+  .panel[data-panel="trace"] > p.hint, .download-card, .chain-controls, .graph-tabs {
+    display: none !important;
+  }
+  main { max-width: 100%; padding: 0; margin: 0; }
+  /* Show every graph pane stacked since we can't tab through paper. */
+  .graph-pane { display: flex !important; background: #fff; border-color: #ccd2db; page-break-inside: avoid; }
+  .graph-pane.hidden { display: flex !important; }
+  .card {
+    background: #fff !important;
+    border: 1px solid #ccd2db !important;
+    page-break-inside: avoid;
+    margin-bottom: 0.6rem;
+  }
+  .card h3 { color: #0050a0 !important; }
+  .stat { background: #f7f8fa !important; border-color: #ccd2db !important; }
+  .stat-value { color: #1a1f2e !important; }
+  a { color: #0050a0 !important; text-decoration: underline; }
+  .chain { color: #1a1f2e; }
+  .chain .hop.cex { color: #1a7d3c !important; }
+  .chain .hop.mixer { color: #b8261d !important; }
+  /* Mermaid SVG nodes: invert their fills for print. */
+  .graph-pane svg .node rect, .graph-pane svg .node polygon {
+    fill: #f7f8fa !important;
+    stroke: #555 !important;
+  }
+  .graph-pane svg text { fill: #1a1f2e !important; }
+  .graph-pane svg .edgeLabel { background: #fff !important; color: #1a1f2e !important; }
+}
 
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
