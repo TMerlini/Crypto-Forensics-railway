@@ -22,6 +22,8 @@ services:
         value: "5"
       - key: MAX_ADDRESSES
         value: "500"
+      - key: ETHERSCAN_MAX_ROWS
+        value: "30000"
       - key: RATE_LIMIT_RPS
         value: "4"
       - key: STOP_AT_ORIGIN

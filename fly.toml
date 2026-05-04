@@ -12,6 +12,7 @@ primary_region = "iad"
   DIRECTION = "both"
   MAX_DEPTH = "5"
   MAX_ADDRESSES = "500"
+  ETHERSCAN_MAX_ROWS = "30000"
   RATE_LIMIT_RPS = "4"
   STOP_AT_ORIGIN = "true"
   # Secrets (set via `fly secrets set ...`):

@@ -93,24 +93,28 @@ export async function runTrace({
     });
 
     try {
-      const [nativeTxs, internalTxs, erc20, erc721, erc1155] = await Promise.all([
-        client.nativeTxs(address),
-        client.internalTxs(address),
-        client.erc20Txs(address),
-        client.erc721Txs(address),
-        client.erc1155Txs(address),
-      ]);
-      state.stats.txsFetched += nativeTxs.length + internalTxs.length + erc20.length + erc721.length + erc1155.length;
-
-      const ingestors = [
-        ["native", nativeTxs],
-        ["internal", internalTxs],
-        ["erc20", erc20],
-        ["erc721", erc721],
-        ["erc1155", erc1155],
+      // Fetch the five endpoints sequentially rather than in parallel. Each
+      // endpoint can return many MB of JSON for whale-sized addresses; running
+      // them one at a time keeps peak heap roughly 5× smaller and lets V8
+      // reclaim the previous batch before the next one lands.
+      const endpoints = [
+        ["native", () => client.nativeTxs(address)],
+        ["internal", () => client.internalTxs(address)],
+        ["erc20", () => client.erc20Txs(address)],
+        ["erc721", () => client.erc721Txs(address)],
+        ["erc1155", () => client.erc1155Txs(address)],
       ];
       let count = 0;
-      for (const [kind, rows] of ingestors) {
+      let totalRows = 0;
+      for (const [kind, fetch] of endpoints) {
+        let rows;
+        try {
+          rows = await fetch();
+        } catch (err) {
+          onProgress({ type: "error", address, kind, error: err.message });
+          continue;
+        }
+        totalRows += rows.length;
         count += ingest({
           state,
           address,
@@ -124,6 +128,7 @@ export async function runTrace({
           visitedSet,
         });
       }
+      state.stats.txsFetched += totalRows;
 
       onProgress({ type: "expanded", address, inflows: count });
       if (state.stats.expanded % checkpointEvery === 0) onCheckpoint(state);

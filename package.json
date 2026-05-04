@@ -14,9 +14,9 @@
     "node": ">=20"
   },
   "scripts": {
-    "trace": "node src/trace.mjs",
-    "ui": "node src/server.mjs",
-    "start": "node src/server.mjs"
+    "trace": "node --max-old-space-size=4096 src/trace.mjs",
+    "ui": "node --max-old-space-size=4096 src/server.mjs",
+    "start": "node --max-old-space-size=4096 src/server.mjs"
   },
   "dependencies": {
     "viem": "^2.21.0"

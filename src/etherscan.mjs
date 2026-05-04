@@ -9,6 +9,13 @@ const BASE = "https://api.etherscan.io/v2/api";
 // starting from (last returned blockNumber + 1), and so on.
 const PAGE_LIMIT = 10_000;
 
+// Hard ceiling on rows we'll keep per (address, endpoint). Whale wallets can
+// emit hundreds of thousands of transfers and a single fetch easily chews
+// hundreds of MB. 30k is enough to capture the usual scammer-address footprint
+// (mempool sweepers rarely exceed a few thousand events) and prevents one
+// busy node from OOM-ing the whole trace. Tunable via env: ETHERSCAN_MAX_ROWS.
+const MAX_ROWS_PER_ENDPOINT = Number(process.env.ETHERSCAN_MAX_ROWS ?? 30_000);
+
 export class RateLimiter {
   constructor(rps) {
     this.intervalMs = 1000 / rps;
@@ -98,6 +105,10 @@ export class Etherscan {
         if (seen.has(key)) continue;
         seen.add(key);
         all.push(row);
+        if (all.length >= MAX_ROWS_PER_ENDPOINT) {
+          // Whale wallet — bail out before we eat all available heap.
+          return all;
+        }
       }
 
       if (batch.length < PAGE_LIMIT) break;
