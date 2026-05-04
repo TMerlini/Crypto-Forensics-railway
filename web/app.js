@@ -13,6 +13,7 @@ $$(".tab").forEach((t) =>
     $$(".panel").forEach((p) => p.classList.toggle("active", p.dataset.panel === t.dataset.tab));
     if (t.dataset.tab === "history") loadHistory();
     if (t.dataset.tab === "playbook") loadPlaybook();
+    if (t.dataset.tab === "reports") refreshReportsTab();
   }),
 );
 
@@ -67,6 +68,11 @@ let currentTraceParams = null;
 let currentAnalysis = null;
 let traceEs = null;
 
+/** Snapshot for Reports tab + Cursor Canvas export (sessionStorage). */
+const REPORT_SNAPSHOT_KEY = "web3security:lastReportBundle";
+/** Chain + direction for the active trace (reports meta). */
+let currentTraceMeta = { chainId: null, direction: null };
+
 $("#trace-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const fd = new FormData(e.target);
@@ -76,6 +82,7 @@ $("#trace-form").addEventListener("submit", async (e) => {
   body.rps = Number(body.rps);
   body.chainId = Number(body.chainId);
   body.stopAtOrigin = fd.get("stopAtOrigin") === "on";
+  body.adaptiveRps = fd.get("adaptiveRps") === "on";
 
   // Paid-tier chains: server rejects with HTTP 402 unless the user has ticked
   // the "I have a paid plan" box. We forward that signal explicitly so the
@@ -98,10 +105,12 @@ $("#trace-form").addEventListener("submit", async (e) => {
 
   currentRunId = json.runId;
   currentTraceTarget = String(body.scamAddress).toLowerCase();
+  currentTraceMeta = { chainId: body.chainId, direction: body.direction };
   currentTraceParams = {
     apiKey: body.apiKey ?? "",
     chainId: body.chainId,
     rps: body.rps,
+    adaptiveRps: body.adaptiveRps,
   };
   $("#trace-progress").classList.remove("hidden");
   $("#trace-report").classList.add("hidden");
@@ -130,6 +139,11 @@ function handleTraceEvent(ev, cap) {
   } else if (ev.type === "expanded") {
     log.textContent = log.textContent.replace(/\n$/, "") + `  → ${ev.inflows} transfers\n`;
     log.scrollTop = log.scrollHeight;
+  } else if (ev.type === "etherscan-page") {
+    const rps = ev.effectiveRps != null ? ` ~${ev.effectiveRps}/s` : "";
+    const cap = ev.capped ? " cap" : "";
+    log.textContent += `[fetch] ${shortAddr(ev.address)} ${ev.endpoint} p${ev.pageIndex} ${ev.rowsTotal} rows${cap}${rps}\n`;
+    log.scrollTop = log.scrollHeight;
   } else if (ev.type === "done") {
     $("#trace-txs").textContent = ev.txsFetched;
     log.textContent += `\n[done] nodes=${ev.nodes} edges=${ev.edges} txs=${ev.txsFetched}\n`;
@@ -145,6 +159,213 @@ function handleTraceEvent(ev, cap) {
   } else if (ev.type === "cap-reached") {
     log.textContent += `\n[cap reached: ${ev.cap} addresses]\n`;
   }
+}
+
+function saveReportSnapshot(runId, analysis) {
+  if (!currentTraceTarget || !analysis) return;
+  const bundle = {
+    target: currentTraceTarget,
+    chainId: currentTraceMeta.chainId,
+    direction: currentTraceMeta.direction,
+    runId: runId ?? currentRunId,
+    savedAt: new Date().toISOString(),
+    analysis,
+  };
+  try {
+    sessionStorage.setItem(REPORT_SNAPSHOT_KEY, JSON.stringify(bundle));
+  } catch (_) {}
+}
+
+function getReportBundle() {
+  if (currentAnalysis && currentTraceTarget) {
+    return {
+      target: currentTraceTarget,
+      chainId: currentTraceMeta.chainId,
+      direction: currentTraceMeta.direction,
+      runId: currentRunId,
+      savedAt: new Date().toISOString(),
+      analysis: currentAnalysis,
+    };
+  }
+  try {
+    const raw = sessionStorage.getItem(REPORT_SNAPSHOT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function buildCanvasTsx(bundle) {
+  const embedded = JSON.stringify(bundle, null, 2);
+  return `import { Divider, Grid, H1, H2, Stack, Stat, Table, Text } from 'cursor/canvas';
+
+const REPORT_DATA = ${embedded};
+
+export default function TraceSearchReport() {
+  const a = REPORT_DATA.analysis;
+  const t = a.totals;
+  const target = REPORT_DATA.target || "";
+  const short =
+    target.length > 14 ? target.slice(0, 10) + "…" + target.slice(-6) : target;
+  return (
+    <Stack gap={20}>
+      <H1>Trace search report</H1>
+      <Text tone="secondary" size="small">
+        {short}
+        {" · chain "}
+        {String(REPORT_DATA.chainId ?? "")}
+        {" · "}
+        {String(REPORT_DATA.direction ?? "")}
+        {REPORT_DATA.runId
+          ? " · run " + String(REPORT_DATA.runId).slice(0, 8) + "…"
+          : ""}
+      </Text>
+      <Grid columns={4} gap={12}>
+        <Stat value={String(t.inflowCount)} label="Inflows" />
+        <Stat value={String(t.outflowCount)} label="Outflows" />
+        <Stat value={String(t.uniqueVictimAddresses)} label="Likely victims" />
+        <Stat value={String(t.nodesDiscovered)} label="Nodes" />
+      </Grid>
+      <Divider />
+      <H2>Timeline</H2>
+      <Text tone="secondary" size="small">
+        First inflow:{" "}
+        {t.firstInflowAt ? String(t.firstInflowAt).replace("T", " ").slice(0, 19) : "—"}
+        {" · Last outflow: "}
+        {t.lastOutflowAt ? String(t.lastOutflowAt).replace("T", " ").slice(0, 19) : "—"}
+      </Text>
+      <Divider />
+      <H2>Received by asset</H2>
+      <Table
+        headers={["Symbol", "Amount", "Transfers"]}
+        rows={(a.inflowsByAsset ?? []).slice(0, 24).map((x) => [
+          String(x.symbol ?? ""),
+          String(x.amountFormatted ?? ""),
+          String(x.count ?? ""),
+        ])}
+      />
+      <Divider />
+      <H2>Sent by asset</H2>
+      <Table
+        headers={["Symbol", "Amount", "Transfers"]}
+        rows={(a.outflowsByAsset ?? []).slice(0, 24).map((x) => [
+          String(x.symbol ?? ""),
+          String(x.amountFormatted ?? ""),
+          String(x.count ?? ""),
+        ])}
+      />
+      <Divider />
+      <H2>Chains</H2>
+      <Text tone="secondary" size="small">
+        Gas-seed hops: {String((a.gasSeedChain ?? []).length)} · Cash-out hops:{" "}
+        {String((a.cashOutChain ?? []).length)} · Endpoints labelled:{" "}
+        {String((a.cashOutEndpoints ?? []).length)}
+      </Text>
+      <Text tone="secondary" size="small">
+        Exported{" "}
+        {String(REPORT_DATA.savedAt ?? "")
+          .replace("T", " ")
+          .slice(0, 19)}
+      </Text>
+    </Stack>
+  );
+}
+`;
+}
+
+function refreshReportsTab() {
+  const root = $("#reports-root");
+  if (!root) return;
+  const bundle = getReportBundle();
+  if (!bundle?.analysis) {
+    root.innerHTML = `<div class="reports-placeholder">No trace loaded yet. Run a trace on the <strong>Trace</strong> tab — a snapshot appears here automatically. It is kept for this browser session only.</div>`;
+    return;
+  }
+
+  const a = bundle.analysis;
+  const t = a.totals;
+  const stats = [
+    ["Inflows", t.inflowCount],
+    ["Outflows", t.outflowCount],
+    ["Likely victims", t.uniqueVictimAddresses],
+    ["Nodes", t.nodesDiscovered],
+    ["Edges", t.edgesDiscovered ?? "—"],
+    ["Unique senders", t.uniqueSendersToTarget],
+    ["Unique recipients", t.uniqueRecipientsFromTarget],
+    ["First inflow", t.firstInflowAt ? formatDate(t.firstInflowAt) : "—"],
+    ["Last outflow", t.lastOutflowAt ? formatDate(t.lastOutflowAt) : "—"],
+  ];
+
+  const statHtml = stats
+    .map(
+      ([l, v]) =>
+        `<div class="stat"><div class="stat-label">${escapeHtml(l)}</div><div class="stat-value">${escapeHtml(String(v))}</div></div>`,
+    )
+    .join("");
+
+  const mkAssetRows = (rows) =>
+    (rows ?? [])
+      .slice(0, 14)
+      .map(
+        (x) =>
+          `<tr><td>${escapeHtml(String(x.symbol ?? ""))}</td><td class="num mono">${escapeHtml(String(x.amountFormatted ?? ""))}</td><td class="num">${escapeHtml(String(x.count ?? ""))}</td></tr>`,
+      )
+      .join("");
+
+  const gasN = (a.gasSeedChain ?? []).length;
+  const cashN = (a.cashOutChain ?? []).length;
+  const epN = (a.cashOutEndpoints ?? []).length;
+
+  root.innerHTML = `
+    <div class="reports-surface">
+      <div>
+        <h3 class="reports-title">Trace snapshot</h3>
+        <div class="reports-meta">
+          ${escapeHtml(shortAddr(bundle.target))} · chain ${escapeHtml(String(bundle.chainId ?? ""))} · ${escapeHtml(String(bundle.direction ?? ""))}
+          ${bundle.runId ? ` · run ${escapeHtml(String(bundle.runId).slice(0, 8))}…` : ""}<br/>
+          Saved ${escapeHtml(formatDate(bundle.savedAt || new Date().toISOString()))}
+        </div>
+      </div>
+      <div class="reports-toolbar">
+        <span class="muted-label">Export</span>
+        <button type="button" class="primary" id="reports-copy-json">Copy JSON</button>
+        <button type="button" id="reports-dl-canvas">Download Cursor Canvas (.canvas.tsx)</button>
+      </div>
+      <hr class="reports-divider" />
+      <div class="stat-grid">${statHtml}</div>
+      <hr class="reports-divider" />
+      <h4 class="reports-section-title">Summary</h4>
+      <ul class="reports-summary-lines">
+        <li>Gas-seed trail: ${gasN} hop(s)</li>
+        <li>Cash-out trail: ${cashN} hop(s)</li>
+        <li>Labelled cash-out endpoints: ${epN}</li>
+      </ul>
+      <hr class="reports-divider" />
+      <h4 class="reports-section-title">Received by asset</h4>
+      <div class="reports-table-wrap"><table><thead><tr><th>Symbol</th><th class="num">Amount</th><th class="num">Transfers</th></tr></thead><tbody>${mkAssetRows(a.inflowsByAsset)}</tbody></table></div>
+      <h4 class="reports-section-title">Sent by asset</h4>
+      <div class="reports-table-wrap"><table><thead><tr><th>Symbol</th><th class="num">Amount</th><th class="num">Transfers</th></tr></thead><tbody>${mkAssetRows(a.outflowsByAsset)}</tbody></table></div>
+    </div>`;
+
+  $("#reports-copy-json", root).addEventListener("click", async () => {
+    const payload = JSON.stringify(bundle, null, 2);
+    try {
+      await navigator.clipboard.writeText(payload);
+      const b = $("#reports-copy-json", root);
+      const prev = b.textContent;
+      b.textContent = "Copied";
+      setTimeout(() => {
+        b.textContent = prev;
+      }, 1600);
+    } catch {
+      alert("Clipboard unavailable — use Download Canvas or copy from downloaded JSON.");
+    }
+  });
+
+  $("#reports-dl-canvas", root).addEventListener("click", () => {
+    const name = `trace-${shortAddr(bundle.target)}-report.canvas.tsx`;
+    downloadFile(name, buildCanvasTsx(bundle), "text/plain");
+  });
 }
 
 function renderReport(a, runId, opts = {}) {
@@ -220,6 +441,9 @@ function renderReport(a, runId, opts = {}) {
   $("#dl-html", dl).addEventListener("click", () => downloadHtmlReport(a, currentTraceTarget, runId));
   $("#dl-json", dl).addEventListener("click", () => downloadFile(`trace-${shortAddr(currentTraceTarget)}.json`, JSON.stringify({ target: currentTraceTarget, runId, generatedAt: new Date().toISOString(), params: currentTraceParams, analysis: a }, null, 2), "application/json"));
   $("#dl-print", dl).addEventListener("click", () => window.print());
+
+  saveReportSnapshot(runId, a);
+  refreshReportsTab();
 
   if (scroll) el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -336,6 +560,7 @@ async function onFollowFurther(button, statusEl) {
         apiKey: currentTraceParams.apiKey,
         chainId: currentTraceParams.chainId,
         rps: currentTraceParams.rps,
+        adaptiveRps: currentTraceParams.adaptiveRps !== false,
         direction,
         startAddress,
         startHop,

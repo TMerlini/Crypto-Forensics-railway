@@ -86,31 +86,118 @@ const PAGE_LIMIT = 10_000;
 // busy node from OOM-ing the whole trace. Tunable via env: ETHERSCAN_MAX_ROWS.
 const MAX_ROWS_PER_ENDPOINT = Number(process.env.ETHERSCAN_MAX_ROWS ?? 30_000);
 
+/** Etherscan free tier advertises ~3 calls/sec — stay under by default (see DEFAULT_RPS). */
+export const ETHERSCAN_FREE_TIER_MAX_RPS = 3;
+
+/** Safe default when caller omits `rps` — stays under free-tier 3/sec ceiling. */
+export const ETHERSCAN_DEFAULT_RPS = 2.5;
+
+/** HTTP fetch timeout per request (whales paginate many times). */
+const FETCH_TIMEOUT_MS = Number(process.env.ETHERSCAN_FETCH_TIMEOUT_MS ?? 120_000);
+
 export class RateLimiter {
-  constructor(rps) {
+  /** @param rps Target sustained requests per second (use ≤3 on free tier). */
+  constructor(rps, jitterMs = 80) {
     this.intervalMs = 1000 / rps;
+    this.jitterMs = jitterMs;
     this.nextAllowedAt = 0;
   }
   async acquire() {
     const now = Date.now();
     const wait = Math.max(0, this.nextAllowedAt - now);
-    this.nextAllowedAt = Math.max(now, this.nextAllowedAt) + this.intervalMs;
+    // Tiny jitter avoids aligned bursts when multiple modules share timing assumptions.
+    this.nextAllowedAt =
+      Math.max(now, this.nextAllowedAt) + this.intervalMs + Math.random() * this.jitterMs;
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  }
+}
+
+/**
+ * Token-bucket-style spacing that slows down after HTTP 429 / NOTOK rate-limit and
+ * speeds up again after a streak of successful calls. Keeps throughput near the
+ * user's target RPS when the API allows it without wedging traces in retry loops.
+ */
+export class AdaptiveRateLimiter {
+  constructor(targetRps, { jitterMs = 80 } = {}) {
+    this.targetRps = Math.max(0.25, Number(targetRps) || ETHERSCAN_DEFAULT_RPS);
+    this.jitterMs = jitterMs;
+    /** Fastest spacing allowed (user ceiling). */
+    this.minIntervalMs = 1000 / this.targetRps;
+    /** Slowest spacing when repeatedly rate-limited (~0.15–0.35 RPS). */
+    this.maxIntervalMs = Math.min(12_000, Math.max(4500, 4500 / Math.min(this.targetRps, 1.5)));
+    // Start slightly conservative so the first burst doesn't instantly trip NOTOK.
+    this.intervalMs = Math.min(this.maxIntervalMs, this.minIntervalMs * 1.18);
+    this.nextAllowedAt = 0;
+    this.successStreak = 0;
+  }
+
+  effectiveRps() {
+    return 1000 / this.intervalMs;
+  }
+
+  slowDown() {
+    this.successStreak = 0;
+    this.intervalMs = Math.min(this.maxIntervalMs, this.intervalMs * 1.92 + Math.random() * 350);
+  }
+
+  noteSuccess() {
+    this.successStreak++;
+    // After enough green responses, creep faster toward the user's target RPS.
+    if (this.successStreak >= 14 && this.intervalMs > this.minIntervalMs * 1.06) {
+      this.intervalMs = Math.max(this.minIntervalMs, this.intervalMs * 0.86);
+      this.successStreak = 0;
+    }
+  }
+
+  async acquire() {
+    const now = Date.now();
+    const wait = Math.max(0, this.nextAllowedAt - now);
+    this.nextAllowedAt =
+      Math.max(now, this.nextAllowedAt) + this.intervalMs + Math.random() * this.jitterMs;
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
   }
 }
 
 export class Etherscan {
-  constructor({ apiKey, chainId, rps = 4, baseUrl = null }) {
+  constructor({
+    apiKey,
+    chainId,
+    rps = ETHERSCAN_DEFAULT_RPS,
+    baseUrl = null,
+    adaptiveRps = null,
+    onPaginateProgress = null,
+  } = {}) {
     if (!apiKey) throw new Error("API key is required");
     this.apiKey = apiKey;
     this.chainId = String(chainId);
-    // Allow callers to force a custom URL (handy for self-hosted forks).
     this.baseUrl = baseUrl ?? V2_BASE;
     this.chain = chainInfo(chainId);
-    this.limiter = new RateLimiter(rps);
+    const useAdaptive =
+      adaptiveRps === false
+        ? false
+        : adaptiveRps === true ||
+          String(process.env.ETHERSCAN_ADAPTIVE_RPS ?? "true").toLowerCase() !== "false";
+    this.limiter = useAdaptive ? new AdaptiveRateLimiter(rps) : new RateLimiter(rps);
+    this.adaptive = useAdaptive;
+    this.onPaginateProgress = typeof onPaginateProgress === "function" ? onPaginateProgress : null;
   }
 
-  async _call(params, { retries = 5 } = {}) {
+  _noteLimiterOk() {
+    if (this.adaptive && typeof this.limiter.noteSuccess === "function") this.limiter.noteSuccess();
+  }
+
+  _noteLimiterThrottle() {
+    if (this.adaptive && typeof this.limiter.slowDown === "function") this.limiter.slowDown();
+  }
+
+  _effectiveRpsTelemetry() {
+    if (this.adaptive && typeof this.limiter.effectiveRps === "function") {
+      return Math.round(this.limiter.effectiveRps() * 100) / 100;
+    }
+    return null;
+  }
+
+  async _call(params, { retries = 10 } = {}) {
     const url = new URL(this.baseUrl);
     url.searchParams.set("chainid", this.chainId);
     url.searchParams.set("apikey", this.apiKey);
@@ -122,12 +209,23 @@ export class Etherscan {
     for (let attempt = 0; attempt <= retries; attempt++) {
       await this.limiter.acquire();
       try {
-        const res = await fetch(url, { headers: { accept: "application/json" } });
+        const fetchOpts = {
+          headers: { accept: "application/json" },
+        };
+        if (FETCH_TIMEOUT_MS > 0) fetchOpts.signal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+
+        const res = await fetch(url, fetchOpts);
         if (!res.ok) {
           // 429 = rate limited, 5xx = server issue — both retryable
           if (res.status === 429 || res.status >= 500) {
             lastErr = new Error(`HTTP ${res.status}`);
-            await sleep(backoffMs(attempt));
+            this._noteLimiterThrottle();
+            let delay = backoffMs(attempt);
+            const ra = res.headers.get("retry-after");
+            if (ra && /^\d+$/.test(String(ra).trim())) {
+              delay = Math.max(delay, Number(ra.trim()) * 1000);
+            }
+            await sleep(delay);
             continue;
           }
           throw new Error(`HTTP ${res.status}: ${await res.text()}`);
@@ -135,15 +233,24 @@ export class Etherscan {
         const json = await res.json();
         // Etherscan returns { status, message, result }. status="0" with
         // message="No transactions found" is a valid empty result — NOT an error.
-        if (json.status === "1") return json.result;
+        if (json.status === "1") {
+          const result = json.result;
+          this._noteLimiterOk();
+          return result;
+        }
         if (json.status === "0") {
           const msg = String(json.message || "").toLowerCase();
           const resultStr = String(json.result ?? "").toLowerCase();
-          if (msg.includes("no transactions") || msg.includes("no records")) return [];
+          if (msg.includes("no transactions") || msg.includes("no records")) {
+            this._noteLimiterOk();
+            return [];
+          }
           if (msg.includes("rate limit") || msg.includes("max rate") || msg.includes("max calls") ||
               resultStr.includes("max rate") || resultStr.includes("rate limit")) {
             lastErr = new Error(`rate-limited: ${json.message}`);
-            await sleep(backoffMs(attempt));
+            this._noteLimiterThrottle();
+            // Free tier is strict — pause longer than generic backoff before retry.
+            await sleep(Math.max(backoffMs(attempt), 1500 + Math.random() * 500));
             continue;
           }
           // Paid-only chain hit on a free key — the most common chain misconfig.
@@ -171,9 +278,18 @@ export class Etherscan {
           // is possible without staring at NOTOK in the log.
           throw new Error(`Etherscan: ${json.message} | ${JSON.stringify(json.result)}`);
         }
+        this._noteLimiterOk();
         return json.result ?? [];
       } catch (err) {
         lastErr = err;
+        const aborted =
+          err?.name === "TimeoutError" ||
+          err?.name === "AbortError" ||
+          (typeof err?.message === "string" && err.message.includes("timed out"));
+        if (aborted && attempt < retries) {
+          await sleep(Math.max(backoffMs(attempt), 2000));
+          continue;
+        }
         if (attempt < retries) await sleep(backoffMs(attempt));
       }
     }
@@ -185,6 +301,7 @@ export class Etherscan {
     const all = [];
     let startblock = 0;
     const seen = new Set();
+    let pageIdx = 0;
     while (true) {
       const batch = await this._call({
         ...baseParams,
@@ -194,6 +311,8 @@ export class Etherscan {
         offset: PAGE_LIMIT,
         sort: "asc",
       });
+      pageIdx++;
+
       if (!Array.isArray(batch) || batch.length === 0) break;
 
       for (const row of batch) {
@@ -203,8 +322,33 @@ export class Etherscan {
         seen.add(key);
         all.push(row);
         if (all.length >= MAX_ROWS_PER_ENDPOINT) {
-          // Whale wallet — bail out before we eat all available heap.
+          if (this.onPaginateProgress) {
+            try {
+              this.onPaginateProgress({
+                action: baseParams.action,
+                batchRows: batch.length,
+                cumulativeRows: all.length,
+                pageIndex: pageIdx,
+                effectiveRps: this._effectiveRpsTelemetry(),
+                capped: true,
+              });
+            } catch (_) {}
+          }
           return all;
+        }
+      }
+
+      if (this.onPaginateProgress) {
+        try {
+          this.onPaginateProgress({
+            action: baseParams.action,
+            batchRows: batch.length,
+            cumulativeRows: all.length,
+            pageIndex: pageIdx,
+            effectiveRps: this._effectiveRpsTelemetry(),
+          });
+        } catch (_) {
+          /* UI callback must not break pagination */
         }
       }
 
@@ -248,5 +392,5 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 function backoffMs(attempt) {
-  return Math.min(30_000, 500 * Math.pow(2, attempt)) + Math.random() * 250;
+  return Math.min(45_000, 750 * Math.pow(2, attempt)) + Math.random() * 400;
 }

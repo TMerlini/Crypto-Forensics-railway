@@ -28,6 +28,6 @@ services:
       - key: ETHERSCAN_MAX_ROWS
         value: "30000"
       - key: RATE_LIMIT_RPS
-        value: "4"
+        value: "2.5"
       - key: STOP_AT_ORIGIN
         value: "true"

@@ -154,7 +154,8 @@ async function startTrace(req, res) {
     scamAddress: String(body.scamAddress ?? "").toLowerCase(),
     maxDepth: clamp(Number(body.maxDepth ?? env.maxDepth), 1, 50),
     maxAddresses: clamp(Number(body.maxAddresses ?? env.maxAddresses), 1, 50_000),
-    rps: clamp(Number(body.rps ?? env.rps), 1, 30),
+    rps: clamp(Number(body.rps ?? env.rps), 0.5, 30),
+    adaptiveRps: body.adaptiveRps !== false,
     stopAtOrigin: body.stopAtOrigin !== false,
     direction: ["in", "out", "both"].includes(body.direction) ? body.direction : env.direction,
   };
@@ -288,7 +289,8 @@ async function extendChainRoute(req, res) {
   const direction = body.direction === "backward" ? "backward" : body.direction === "forward" ? "forward" : null;
   if (!direction) return sendJson(res, { error: "direction must be 'backward' or 'forward'" }, 400);
   const hops = clamp(Number(body.hops ?? 5), 1, 20);
-  const rps = clamp(Number(body.rps ?? env.rps), 1, 30);
+  const rps = clamp(Number(body.rps ?? env.rps), 0.5, 30);
+  const adaptiveRps = body.adaptiveRps !== false;
   const startHop = clamp(Number(body.startHop ?? 0), 0, 1000);
 
   try {
@@ -299,6 +301,7 @@ async function extendChainRoute(req, res) {
       direction,
       hops,
       rps,
+      adaptiveRps,
       startHop,
     });
     sendJson(res, { chain });

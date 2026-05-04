@@ -3,7 +3,7 @@
 //
 // Emits progress events via a callback so the UI can stream live updates over SSE.
 
-import { Etherscan } from "./etherscan.mjs";
+import { Etherscan, ETHERSCAN_DEFAULT_RPS } from "./etherscan.mjs";
 import { labelOf, isOrigin } from "./labels.mjs";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
@@ -14,7 +14,8 @@ export async function runTrace({
   scamAddress,
   maxDepth = 15,
   maxAddresses = 2000,
-  rps = 4,
+  rps = ETHERSCAN_DEFAULT_RPS,
+  adaptiveRps,
   stopAtOrigin = true,
   fromTs = null,
   toTs = null,
@@ -26,7 +27,24 @@ export async function runTrace({
   resumeFrom = null,
 }) {
   const target = scamAddress.toLowerCase();
-  const client = new Etherscan({ apiKey, chainId, rps });
+  const paginateCtx = { address: target };
+  const client = new Etherscan({
+    apiKey,
+    chainId,
+    rps,
+    adaptiveRps,
+    onPaginateProgress: (info) =>
+      onProgress({
+        type: "etherscan-page",
+        address: paginateCtx.address,
+        endpoint: info.action,
+        batchRows: info.batchRows,
+        rowsTotal: info.cumulativeRows,
+        pageIndex: info.pageIndex,
+        effectiveRps: info.effectiveRps,
+        capped: info.capped ?? false,
+      }),
+  });
 
   const state = resumeFrom ?? {
     nodes: {},
@@ -60,6 +78,7 @@ export async function runTrace({
     }
 
     const { address, depth } = state.queue.shift();
+    paginateCtx.address = address;
     if (visitedSet.has(address)) continue;
     visitedSet.add(address);
     state.visited.push(address);

@@ -16,6 +16,7 @@
   <nav class="tabs">
     <button class="tab active" data-tab="trace">Trace</button>
     <button class="tab" data-tab="rescue">Rescue</button>
+    <button class="tab" data-tab="reports">Reports</button>
     <button class="tab" data-tab="history">History</button>
     <button class="tab" data-tab="playbook">Playbook</button>
   </nav>
@@ -72,9 +73,14 @@
           <input type="number" name="maxAddresses" value="500" min="1" max="50000" />
         </label>
         <label>Rate limit (req/s)
-          <input type="number" name="rps" value="4" min="1" max="30" />
+          <input type="number" name="rps" value="2.5" min="0.5" max="30" step="0.5" title="Free tier ≈3/sec — use 2–2.5 to avoid stalls" />
+          <span class="hint-inline">Free tier ~3/sec — default 2.5 is safe; raise only with paid Etherscan.</span>
         </label>
       </div>
+      <label class="checkbox">
+        <input type="checkbox" name="adaptiveRps" checked />
+        Adaptive rate limit — slow down after Etherscan throttles (recommended)
+      </label>
       <label>API key
         <span class="hint-inline">One Etherscan V2 key works on every chain. <a href="https://etherscan.io/myapikey" target="_blank" rel="noopener">Generate one here</a> (free). Free tier covers Ethereum, Polygon, Arbitrum, Linea, Gnosis, Blast, Mantle, Celo, etc. Base, Optimism, BSC, and Avalanche need <a href="https://etherscan.io/apis" target="_blank" rel="noopener">Etherscan Lite or Pro</a>. Optional if set in server env.</span>
         <input type="password" name="apiKey" autocomplete="off" placeholder="leave blank to use server env" />
@@ -176,6 +182,13 @@
     </form>
 
     <div id="rescue-output" class="report hidden"></div>
+  </section>
+
+  <!-- REPORTS TAB (canvas-style snapshot + Cursor Canvas export) ========= -->
+  <section class="panel" data-panel="reports">
+    <h2>Reports</h2>
+    <p class="hint">Console-quality snapshot of your latest trace: stats and asset tables in a tight layout similar to a <strong>Cursor Canvas</strong>. For the live IDE canvas (beside chat), download the filled file below and save it as <code class="mono-inline">trace-search-report.canvas.tsx</code> under your workspace <code class="mono-inline">canvases/</code> folder.</p>
+    <div id="reports-root"></div>
   </section>
 
   <!-- HISTORY TAB ============================================= -->

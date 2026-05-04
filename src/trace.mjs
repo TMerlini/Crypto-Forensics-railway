@@ -16,7 +16,7 @@ mkdirSync(outDir, { recursive: true });
 const shortScam = env.scamAddress.slice(0, 6) + env.scamAddress.slice(-4);
 const checkpointPath = join(outDir, `trace-${shortScam}-${env.direction}.checkpoint.json`);
 
-console.log(`[trace] chain=${env.chainId} target=${env.scamAddress} direction=${env.direction} maxDepth=${env.maxDepth} maxAddresses=${env.maxAddresses} rps=${env.rps} stopAtOrigin=${env.stopAtOrigin}`);
+console.log(`[trace] chain=${env.chainId} target=${env.scamAddress} direction=${env.direction} maxDepth=${env.maxDepth} maxAddresses=${env.maxAddresses} rps=${env.rps} adaptiveRps=${env.adaptiveRps} stopAtOrigin=${env.stopAtOrigin}`);
 console.log(`[trace] output dir: ${outDir}`);
 
 let aborting = false;
@@ -38,6 +38,7 @@ try {
     maxDepth: env.maxDepth,
     maxAddresses: env.maxAddresses,
     rps: env.rps,
+    adaptiveRps: env.adaptiveRps,
     stopAtOrigin: env.stopAtOrigin,
     fromTs: env.fromTs,
     toTs: env.toTs,
@@ -52,6 +53,12 @@ try {
         );
       } else if (ev.type === "expanded") {
         process.stdout.write(`${ev.inflows} transfers\n`);
+      } else if (ev.type === "etherscan-page") {
+        const rps = ev.effectiveRps != null ? ` ~${ev.effectiveRps}/s` : "";
+        const cap = ev.capped ? " capped" : "";
+        process.stderr.write(
+          `[etherscan] ${ev.address.slice(0, 10)}… ${ev.endpoint} page=${ev.pageIndex} rows=${ev.rowsTotal}${cap}${rps}\n`,
+        );
       } else if (ev.type === "error") {
         process.stdout.write(`FAILED: ${ev.error}\n`);
       } else if (ev.type === "cap-reached") {

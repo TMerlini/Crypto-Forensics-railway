@@ -6,7 +6,7 @@
 // Returns hops in the same shape as report.mjs's gasSeedChain / cashOutChain,
 // so the UI can splice the result in directly.
 
-import { Etherscan } from "./etherscan.mjs";
+import { Etherscan, ETHERSCAN_DEFAULT_RPS } from "./etherscan.mjs";
 import { labelOf, isOrigin } from "./labels.mjs";
 import { formatUnits } from "./report.mjs";
 
@@ -18,7 +18,8 @@ export async function extendChain({
   startAddress,
   direction,           // "backward" (gas-seed) | "forward" (cash-out)
   hops = 5,
-  rps = 4,
+  rps = ETHERSCAN_DEFAULT_RPS,
+  adaptiveRps,
   startHop = 0,        // numbering offset so appended hops continue from the original chain
   onProgress = () => {},
 }) {
@@ -26,7 +27,24 @@ export async function extendChain({
   if (!/^0x[0-9a-f]{40}$/i.test(startAddress ?? "")) throw new Error("invalid startAddress");
   if (direction !== "backward" && direction !== "forward") throw new Error("direction must be 'backward' or 'forward'");
 
-  const client = new Etherscan({ apiKey, chainId, rps });
+  const paginateCtx = { address: String(startAddress).toLowerCase() };
+  const client = new Etherscan({
+    apiKey,
+    chainId,
+    rps,
+    adaptiveRps,
+    onPaginateProgress: (info) =>
+      onProgress({
+        type: "etherscan-page",
+        address: paginateCtx.address,
+        endpoint: info.action,
+        batchRows: info.batchRows,
+        rowsTotal: info.cumulativeRows,
+        pageIndex: info.pageIndex,
+        effectiveRps: info.effectiveRps,
+        capped: info.capped ?? false,
+      }),
+  });
   const chain = [];
   const seen = new Set();
   let current = startAddress.toLowerCase();
@@ -69,6 +87,8 @@ export async function extendChain({
       chain.push(entry);
       break;
     }
+
+    paginateCtx.address = current;
 
     let txs;
     try {
