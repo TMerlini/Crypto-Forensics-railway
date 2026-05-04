@@ -36,6 +36,7 @@ $$(".tab").forEach((t) =>
 // TRACE
 // ---------------------------------------------------------------------------
 let currentRunId = null;
+let currentTraceTarget = null;
 let traceEs = null;
 
 $("#trace-form").addEventListener("submit", async (e) => {
@@ -57,6 +58,7 @@ $("#trace-form").addEventListener("submit", async (e) => {
   if (!res.ok) { alert(json.error ?? "failed to start trace"); return; }
 
   currentRunId = json.runId;
+  currentTraceTarget = String(body.scamAddress).toLowerCase();
   $("#trace-progress").classList.remove("hidden");
   $("#trace-report").classList.add("hidden");
   $("#trace-log").textContent = "";
@@ -121,6 +123,11 @@ function renderReport(a, runId) {
   statGrid.className = "stat-grid";
   statGrid.innerHTML = stats.map(([l, v]) => `<div class="stat"><div class="stat-label">${l}</div><div class="stat-value">${v}</div></div>`).join("");
   el.appendChild(statGrid);
+
+  // Visual graph (Mermaid). Inserted right after stats so it's the first thing
+  // a human sees — text breakdowns below remain for copy/paste into reports.
+  const target = currentTraceTarget;
+  if (target) renderGraphCards(el, a, target);
 
   // Received (inflows by asset)
   if (a.inflowsByAsset?.length) {
@@ -234,6 +241,266 @@ function addressList(list, valueKey) {
 
 function addrLink(addr) {
   return `<a href="https://etherscan.io/address/${addr}" target="_blank" rel="noopener">${addr.slice(0, 6)}…${addr.slice(-4)}</a>`;
+}
+
+// ---------------------------------------------------------------------------
+// GRAPH VIEW (Mermaid, lazy-loaded from CDN on first trace report)
+// ---------------------------------------------------------------------------
+let mermaidPromise = null;
+function loadMermaid() {
+  if (!mermaidPromise) {
+    mermaidPromise = import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs")
+      .then((mod) => {
+        const mermaid = mod.default;
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: "base",
+          securityLevel: "loose",
+          themeVariables: {
+            // Match the app's dark palette so graphs feel native, not iframed.
+            background: "#121723",
+            primaryColor: "#1a2030",
+            primaryTextColor: "#e8ecf5",
+            primaryBorderColor: "#7ae1ff",
+            lineColor: "#8892a6",
+            secondaryColor: "#242b3d",
+            tertiaryColor: "#0a0d14",
+            mainBkg: "#1a2030",
+            edgeLabelBackground: "#0a0d14",
+            fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+          },
+          flowchart: { htmlLabels: true, curve: "basis", useMaxWidth: true },
+        });
+        return mermaid;
+      });
+  }
+  return mermaidPromise;
+}
+
+function renderGraphCards(el, a, target) {
+  const card = document.createElement("div");
+  card.className = "card graph-card";
+  card.innerHTML = `<h3>Money flow graph</h3>
+    <p class="hint" style="margin-top:-0.25rem">Top funders on the left, target in the middle, cash-out endpoints on the right. Click any node to open it on Etherscan.</p>
+    <div class="graph-tabs">
+      <button class="graph-tab active" data-graph="overview">Overview</button>
+      <button class="graph-tab" data-graph="gasseed">Gas-seed trail</button>
+      <button class="graph-tab" data-graph="cashout">Cash-out trail</button>
+    </div>
+    <div class="graph-pane" data-pane="overview"></div>
+    <div class="graph-pane hidden" data-pane="gasseed"></div>
+    <div class="graph-pane hidden" data-pane="cashout"></div>`;
+  el.appendChild(card);
+
+  const overviewPane = $("[data-pane=overview]", card);
+  const gasseedPane = $("[data-pane=gasseed]", card);
+  const cashoutPane = $("[data-pane=cashout]", card);
+
+  $$(".graph-tab", card).forEach((tab) => {
+    tab.addEventListener("click", () => {
+      $$(".graph-tab", card).forEach((t) => t.classList.toggle("active", t === tab));
+      $$(".graph-pane", card).forEach((p) => p.classList.toggle("hidden", p.dataset.pane !== tab.dataset.graph));
+    });
+  });
+
+  renderMermaid(overviewPane, buildOverviewMermaid(a, target), "ov");
+  if (a.gasSeedChain?.length) {
+    renderMermaid(gasseedPane, buildGasSeedMermaid(a.gasSeedChain, target), "gs");
+  } else {
+    gasseedPane.innerHTML = `<p class="hint">No gas-seed chain (target has no inflows).</p>`;
+  }
+  if (a.cashOutChain?.length) {
+    renderMermaid(cashoutPane, buildCashOutMermaid(a.cashOutChain, target), "co");
+  } else {
+    cashoutPane.innerHTML = `<p class="hint">No cash-out chain (target has no outflows).</p>`;
+  }
+}
+
+async function renderMermaid(container, source, idPrefix) {
+  container.innerHTML = `<div class="graph-loading">Loading graph…</div>`;
+  try {
+    const mermaid = await loadMermaid();
+    const id = `${idPrefix}-${Math.random().toString(36).slice(2, 9)}`;
+    const { svg, bindFunctions } = await mermaid.render(id, source);
+    container.innerHTML = svg;
+    if (bindFunctions) bindFunctions(container);
+  } catch (err) {
+    container.innerHTML = `<p style="color: var(--danger)">Failed to render graph: ${escapeHtml(err.message ?? String(err))}</p>
+      <details><summary>Mermaid source</summary><pre>${escapeHtml(source)}</pre></details>`;
+  }
+}
+
+// Mermaid graph builders ------------------------------------------------------
+
+function shortAddr(a) { return `${a.slice(0, 6)}…${a.slice(-4)}`; }
+
+// Sanitises a label for use inside a quoted Mermaid node label (no quotes / no
+// HTML-breaking chars that survive into the SVG).
+function mmLabel(s) {
+  return String(s ?? "")
+    .replace(/[`"]/g, "'")
+    .replace(/[<>]/g, "")
+    .replace(/&/g, "&amp;");
+}
+
+// Pick a CSS class for a node based on label / category. Matches classDef
+// declarations we emit at the bottom of every diagram.
+function classForNode(node) {
+  if (node?.isTarget) return "target";
+  const cat = node?.category;
+  if (cat === "cex") return "cex";
+  if (cat === "bridge") return "bridge";
+  if (cat === "mixer") return "mixer";
+  if (node?.isContract) return "contract";
+  return "eoa";
+}
+
+// Common preamble / postscript shared across all three diagrams.
+function mermaidClassDefs() {
+  return [
+    "classDef target fill:#3a1418,stroke:#ff6b6b,stroke-width:2px,color:#ffd5d5",
+    "classDef cex fill:#0d2d4f,stroke:#7ae1ff,color:#cfe9ff",
+    "classDef bridge fill:#2a1a4f,stroke:#b08cff,color:#dccdff",
+    "classDef mixer fill:#3a2410,stroke:#ffc857,color:#ffe5b0",
+    "classDef contract fill:#1f2330,stroke:#566076,color:#aab2c5,stroke-dasharray:3 3",
+    "classDef eoa fill:#1a2030,stroke:#3a4660,color:#e8ecf5",
+  ];
+}
+
+function buildOverviewMermaid(a, target) {
+  const lines = ["flowchart LR"];
+  const idMap = new Map();   // lowercase addr → mermaid node id
+  const addrFor = new Map(); // lowercase addr → original-case addr (for click-through URL)
+  let nextId = 0;
+  const idFor = (addr) => {
+    const key = addr.toLowerCase();
+    if (!idMap.has(key)) {
+      idMap.set(key, `n${nextId++}`);
+      addrFor.set(key, addr);
+    }
+    return idMap.get(key);
+  };
+
+  // Target node, always present.
+  const targetId = idFor(target);
+  lines.push(`  ${targetId}["TARGET<br/><tt>${shortAddr(target)}</tt>"]`);
+
+  // Top funders on the left. Cap to 8 to keep graph readable.
+  const funders = (a.topEthFunders ?? []).slice(0, 8);
+  for (const f of funders) {
+    const id = idFor(f.address);
+    const label = f.label ? `${mmLabel(f.label)}<br/><tt>${shortAddr(f.address)}</tt>` : `<tt>${shortAddr(f.address)}</tt>`;
+    lines.push(`  ${id}["${label}"]`);
+    lines.push(`  ${id} -->|"${Number(f.eth).toFixed(3)} ETH"| ${targetId}`);
+    lines.push(`  class ${id} ${classForNode(f)}`);
+  }
+
+  // Cash-out endpoints (CEX / bridge / mixer the target deposited into).
+  const endpoints = a.cashOutEndpoints ?? [];
+  for (const ep of endpoints) {
+    const id = idFor(ep.address);
+    lines.push(`  ${id}["${mmLabel(ep.label ?? "?")}<br/><i>${mmLabel(ep.category)}</i>"]`);
+    // Edge label: ETH total if any, else first asset, else nothing.
+    const totals = Object.values(ep.totals ?? {});
+    const eth = totals.find((t) => t.symbol === "ETH" || t.symbol === "ETH (internal)");
+    const display = eth
+      ? `${Number(eth.amountFormatted).toFixed(3)} ETH`
+      : (totals[0] ? `${totals[0].amountFormatted} ${mmLabel(totals[0].symbol)}` : "");
+    if (display) lines.push(`  ${targetId} -->|"${display}"| ${id}`);
+    else lines.push(`  ${targetId} --> ${id}`);
+    lines.push(`  class ${id} ${classForNode(ep)}`);
+  }
+
+  // Top non-CEX recipients — anything the target sent ETH to that didn't
+  // already show up as a labelled endpoint. Capped at 6 for readability.
+  const labelledAddrs = new Set(endpoints.map((e) => e.address.toLowerCase()));
+  const extraRecipients = (a.topEthRecipients ?? [])
+    .filter((r) => !labelledAddrs.has(r.address.toLowerCase()))
+    .slice(0, 6);
+  for (const r of extraRecipients) {
+    const id = idFor(r.address);
+    const label = r.label ? `${mmLabel(r.label)}<br/><tt>${shortAddr(r.address)}</tt>` : `<tt>${shortAddr(r.address)}</tt>`;
+    lines.push(`  ${id}["${label}"]`);
+    lines.push(`  ${targetId} -->|"${Number(r.eth).toFixed(3)} ETH"| ${id}`);
+    lines.push(`  class ${id} ${classForNode(r)}`);
+  }
+
+  lines.push(`  class ${targetId} target`);
+  lines.push(...mermaidClassDefs());
+  for (const [key, id] of idMap) {
+    lines.push(`  click ${id} "https://etherscan.io/address/${addrFor.get(key)}" "Open on Etherscan" _blank`);
+  }
+  return lines.join("\n");
+}
+
+function buildGasSeedMermaid(chain, target) {
+  // Reverse so the visual flow is funder→target (top-down feels natural for
+  // "follow the money" reading).
+  const lines = ["flowchart TD"];
+  const ids = chain.map((_, i) => `g${i}`);
+
+  for (let i = 0; i < chain.length; i++) {
+    const hop = chain[i];
+    const node = { ...hop, category: hop.label?.split(":")[0] ?? null, address: hop.address };
+    const labelStr = hop.label ? mmLabel(hop.label) : (hop.isContract ? "contract" : "EOA");
+    lines.push(`  ${ids[i]}["hop ${hop.hop}<br/><tt>${shortAddr(hop.address)}</tt><br/>${labelStr}"]`);
+    lines.push(`  class ${ids[i]} ${classForNode(node)}`);
+    if (hop.firstInflow) {
+      const e = hop.firstInflow;
+      const amt = `${e.amount} ${mmLabel(e.asset)}`;
+      // The funder (e.from) is the next hop in the chain. If next chain entry
+      // exists, edge goes from next→current ("funded by"). Otherwise emit a
+      // pseudo node for the funder so the chain ends visibly.
+      if (i + 1 < chain.length) {
+        lines.push(`  ${ids[i + 1]} -->|"${amt}"| ${ids[i]}`);
+      } else {
+        const stubId = `gs_end`;
+        lines.push(`  ${stubId}["<tt>${shortAddr(e.from)}</tt><br/><i>(beyond depth)</i>"]`);
+        lines.push(`  class ${stubId} eoa`);
+        lines.push(`  ${stubId} -->|"${amt}"| ${ids[i]}`);
+      }
+    }
+  }
+
+  // Add target indicator on hop 0
+  if (chain.length) lines.push(`  class ${ids[0]} target`);
+  lines.push(...mermaidClassDefs());
+  // Click-through for every hop
+  const addrIds = new Map();
+  for (let i = 0; i < chain.length; i++) addrIds.set(ids[i], chain[i].address);
+  lines.push(...[...addrIds.entries()].map(([id, a]) => `click ${id} "https://etherscan.io/address/${a}" "Open on Etherscan" _blank`));
+  return lines.join("\n");
+}
+
+function buildCashOutMermaid(chain, target) {
+  const lines = ["flowchart TD"];
+  const ids = chain.map((_, i) => `c${i}`);
+
+  for (let i = 0; i < chain.length; i++) {
+    const hop = chain[i];
+    const node = { ...hop, category: hop.label?.split(":")[0] ?? null };
+    const labelStr = hop.label ? mmLabel(hop.label) : (hop.isContract ? "contract" : "EOA");
+    lines.push(`  ${ids[i]}["hop ${hop.hop}<br/><tt>${shortAddr(hop.address)}</tt><br/>${labelStr}"]`);
+    lines.push(`  class ${ids[i]} ${classForNode(node)}`);
+    if (hop.biggestOutflow) {
+      const e = hop.biggestOutflow;
+      const amt = `${e.amount} ${mmLabel(e.asset)}`;
+      if (i + 1 < chain.length) {
+        lines.push(`  ${ids[i]} -->|"${amt}"| ${ids[i + 1]}`);
+      } else {
+        const stubId = `co_end`;
+        lines.push(`  ${stubId}["<tt>${shortAddr(e.to)}</tt><br/><i>(beyond depth)</i>"]`);
+        lines.push(`  class ${stubId} eoa`);
+        lines.push(`  ${ids[i]} -->|"${amt}"| ${stubId}`);
+      }
+    }
+  }
+  if (chain.length) lines.push(`  class ${ids[0]} target`);
+  lines.push(...mermaidClassDefs());
+  const addrIds = new Map();
+  for (let i = 0; i < chain.length; i++) addrIds.set(ids[i], chain[i].address);
+  lines.push(...[...addrIds.entries()].map(([id, a]) => `click ${id} "https://etherscan.io/address/${a}" "Open on Etherscan" _blank`));
+  return lines.join("\n");
 }
 function txLink(hash) {
   return `<a href="https://etherscan.io/tx/${hash}" target="_blank" rel="noopener">tx</a>`;

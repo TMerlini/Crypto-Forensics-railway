@@ -243,6 +243,43 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 td.mono { font-family: var(--mono); }
 td code { background: transparent; }
 
+/* Graph view --------------------------------------------------- */
+.graph-card { padding-bottom: 1.5rem; }
+.graph-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0.5rem 0 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.graph-tab {
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 0.4rem 0.85rem;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.graph-tab:hover { color: var(--text); }
+.graph-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.graph-pane {
+  background: #0a0d14;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1rem;
+  overflow-x: auto;
+  min-height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.graph-pane.hidden { display: none; }
+.graph-loading { color: var(--muted); font-family: var(--mono); font-size: 0.85rem; }
+.graph-pane svg { max-width: 100%; height: auto; }
+.graph-pane svg .node:hover { cursor: pointer; filter: brightness(1.2); }
+
 .chain {
   font-family: var(--mono);
   font-size: 0.8rem;
