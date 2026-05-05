@@ -20,6 +20,7 @@ forensics/
 │   ├── server.mjs       # local HTTP + SSE server
 │   └── env.mjs          # .env loader
 ├── web/                 # single-page UI (vanilla HTML/CSS/JS)
+├── mcp/                 # MCP stdio server → HTTP API (Cursor / Claude Desktop)
 ├── labels.json          # 100+ known CEX / bridge / mixer addresses
 ├── RECOVERY.md          # field guide for rescuing compromised wallets
 ├── .env.example
@@ -37,14 +38,72 @@ cp .env.example .env   # paste your Etherscan key
 npm run ui             # → http://127.0.0.1:4337
 ```
 
-The UI has four tabs:
+The UI has five tabs:
 
 - **Trace** — enter an address, start a crawl, watch live progress, see the report inline
 - **Rescue** — build and submit a Flashbots bundle (compose → simulate → ship)
 - **History** — past traces on disk
 - **Playbook** — the `RECOVERY.md` guide, rendered inline
+- **Reports** — curated static write-ups plus a live trace snapshot / Canvas export
 
 Everything binds to `127.0.0.1` by default — private keys entered in the Rescue tab stay on your machine.
+
+---
+
+## MCP bridge (Cursor, Claude Desktop, other hosts)
+
+Use this repo’s **HTTP API from any MCP-capable client** via a small stdio server in **`mcp/`**. Point it at a running Sweeper instance (local `npm run ui` or your Railway URL).
+
+### Install
+
+```bash
+cd mcp
+npm install
+```
+
+The entry file is **`mcp/src/server.mjs`** (Node 20+). It does not need to live in the same folder as your other project — you only need this path on disk (clone, submodule, or copy the `mcp/` directory).
+
+### Environment
+
+| Variable | Purpose |
+|----------|---------|
+| `SWEEPER_FORENSICS_URL` | Base URL of the API (default `http://127.0.0.1:4337`) |
+| `SWEEPER_FORENSICS_AUTH_USER` | HTTP Basic user if the server uses `AUTH_USER` / `AUTH_PASSWORD` |
+| `SWEEPER_FORENSICS_AUTH_PASSWORD` | HTTP Basic password (`AUTH_PASSWORD` on the deployment) |
+
+### Cursor (example)
+
+In **Cursor Settings → MCP**, add a server whose command runs Node on this file (use an **absolute** path on your machine):
+
+```json
+{
+  "mcpServers": {
+    "sweeper-forensics": {
+      "command": "node",
+      "args": ["/absolute/path/to/this/repo/mcp/src/server.mjs"],
+      "env": {
+        "SWEEPER_FORENSICS_URL": "http://127.0.0.1:4337"
+      }
+    }
+  }
+}
+```
+
+**Railway** (with Basic auth): set `SWEEPER_FORENSICS_URL` to `https://your-service.up.railway.app` and add the auth env vars above. Restart Cursor after saving.
+
+### Tools (summary)
+
+Registered names are prefixed with `forensics_` (e.g. `forensics_get_config`, `forensics_trace_address`, `forensics_list_written_reports`, `forensics_get_written_report`, `forensics_extend_chain`, …). **Rescue** endpoints are intentionally not exposed through MCP (private keys / different threat model).
+
+Full tool list, truncation notes, and copy-paste snippets: **[mcp/README.md](mcp/README.md)**.
+
+### Reuse in another repo
+
+1. **Git submodule** this repository and reference `path/to/submodule/mcp/src/server.mjs`, or  
+2. **Copy** the `mcp/` tree into your monorepo and run `npm install` there, or  
+3. Keep a single checkout and aim `args` at that path from every MCP config.
+
+Changes to the bridge live in **`mcp/`**; pull this repo (or submodule) to update.
 
 ---
 
@@ -109,10 +168,6 @@ starting a trace on one — no API calls are wasted on free keys hitting Base.
 **Rate limiting.** Free tier is about **3 calls/sec** (see [Etherscan APIs](https://etherscan.io/apis)). This repo defaults to **2.5 req/s** via `RATE_LIMIT_RPS` and the Trace form — staying under that avoids long stalls when Etherscan returns `Max calls per sec rate limit reached`. **Adaptive rate limiting** (on by default; toggle in the Trace form or set `ETHERSCAN_ADAPTIVE_RPS=false` to disable) widens spacing after throttling and creeps back toward your target RPS when responses succeed. While one address paginates heavily, the UI and CLI log **etherscan-page** lines so progress does not look frozen below `MAX_ADDRESSES`. If another tool shares the same key, lower to `2` or `1`. Paid Lite/Pro tiers allow higher throughput.
 
 The **Reports** tab lists curated **`reports/*.html` and `reports/*.md`** analyses from the repo (open in a new tab). Filenames ending with `-YYYY-MM-DD` show that date as a pill; **Latest** marks every report on the newest date batch. The tab also shows a compact snapshot of the latest trace from this browser session and can **download a filled `trace-search-report.canvas.tsx`** for Cursor Canvas beside the chat. A template lives in `canvases/trace-search-report.canvas.tsx`.
-
-### MCP (Cursor / Claude Desktop)
-
-An MCP bridge ships under **`mcp/`**: set `SWEEPER_FORENSICS_URL` (and optional Basic-auth env vars), then register `node …/mcp/src/server.mjs` as an MCP server. See **[mcp/README.md](mcp/README.md)**.
 
 ### Railway
 
