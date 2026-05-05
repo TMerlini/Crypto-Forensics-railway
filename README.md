@@ -110,6 +110,10 @@ starting a trace on one — no API calls are wasted on free keys hitting Base.
 
 The **Reports** tab lists curated **`reports/*.html` and `reports/*.md`** analyses from the repo (open in a new tab). Filenames ending with `-YYYY-MM-DD` show that date as a pill; **Latest** marks every report on the newest date batch. The tab also shows a compact snapshot of the latest trace from this browser session and can **download a filled `trace-search-report.canvas.tsx`** for Cursor Canvas beside the chat. A template lives in `canvases/trace-search-report.canvas.tsx`.
 
+### MCP (Cursor / Claude Desktop)
+
+An MCP bridge ships under **`mcp/`**: set `SWEEPER_FORENSICS_URL` (and optional Basic-auth env vars), then register `node …/mcp/src/server.mjs` as an MCP server. See **[mcp/README.md](mcp/README.md)**.
+
 ### Railway
 
 1. Push this repo to GitHub.

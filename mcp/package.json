@@ -1,0 +1,27 @@
+{
+  "name": "sweeper-forensics-mcp",
+  "version": "1.0.0",
+  "description": "MCP server bridging Cursor / Claude Desktop to the Sweeper Forensics HTTP API (trace, reports, playbook).",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "sweeper-forensics-mcp": "./src/server.mjs"
+  },
+  "scripts": {
+    "start": "node src/server.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "etherscan",
+    "forensics",
+    "web3"
+  ]
+}
