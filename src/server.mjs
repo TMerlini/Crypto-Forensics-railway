@@ -5,7 +5,8 @@
 // Routes:
 //   GET  /                       → static UI (web/index.html)
 //   GET  /static/*               → web/ assets (css, js)
-//   GET  /api/config             → non-secret config + integrations hint (MCP uses stdio, not HTTP on this origin)
+//   GET  /api/config             → non-secret config + integrations (stdio + HTTP MCP)
+//   POST /mcp                    → JSON-RPC 2.0 (HTTP MCP: initialize, ping, tools/list, tools/call)
 //   POST /api/trace              → start a trace (returns runId)
 //   GET  /api/trace/:id/stream   → SSE progress stream + final report
 //   GET  /api/trace/runs         → list past trace runs (scans out/)
@@ -81,14 +82,224 @@ function sendConfig(req, res) {
     integrations: {
       mcp: {
         transport: "stdio",
+        httpJsonRpcUrl: origin ? `${origin}/mcp` : null,
         description:
-          "This deployment exposes REST + SSE only. MCP is not served as JSON-RPC over HTTP on this URL. " +
-          "Run the stdio MCP from the repo's mcp/ package with SWEEPER_FORENSICS_URL set to this origin (see integrations.mcp.sweeperForensicsUrl).",
+          "stdio: run mcp/src/server.mjs with SWEEPER_FORENSICS_URL=this origin. " +
+          "HTTP: POST JSON-RPC 2.0 to httpJsonRpcUrl (same Basic auth as UI when AUTH_PASSWORD is set).",
         sweeperForensicsUrl: origin,
         repositoryPath: "mcp/",
       },
     },
   });
+}
+
+// -----------------------------------------------------------------------------
+// HTTP MCP — POST /mcp (JSON-RPC 2.0 for external AI gateways)
+// -----------------------------------------------------------------------------
+const MCP_HTTP_PROTOCOL_VERSION = "2024-11-05";
+
+const MCP_HTTP_TOOLS = [
+  {
+    name: "trace_address",
+    description:
+      "POST /api/trace then buffers the full GET /api/trace/:id/stream (SSE) until close; returns all SSE lines as one text block.",
+    inputSchema: {
+      type: "object",
+      required: ["scamAddress"],
+      properties: {
+        scamAddress: { type: "string", description: "0x-prefixed 40 hex address" },
+        chainId: { type: "integer" },
+        direction: { type: "string", enum: ["in", "out", "both"] },
+        maxDepth: { type: "integer", minimum: 1, maximum: 50 },
+        maxAddresses: { type: "integer", minimum: 1, maximum: 50000 },
+        rps: { type: "number", minimum: 0.5, maximum: 30 },
+        adaptiveRps: { type: "boolean" },
+        stopAtOrigin: { type: "boolean" },
+        apiKey: { type: "string" },
+        acknowledgedPaidTier: { type: "boolean" },
+        maxWaitSeconds: {
+          type: "integer",
+          minimum: 30,
+          maximum: 3600,
+          description: "Max time to read SSE (default 900)",
+        },
+      },
+    },
+  },
+  {
+    name: "get_trace_runs",
+    description: "GET /api/trace/runs — list saved runs from disk (empty on hosted / DISABLE_DISK).",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "get_playbook",
+    description: "GET /api/playbook — RECOVERY.md as JSON { markdown }.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "get_reports",
+    description: "GET /api/reports — curated HTML/Markdown report index.",
+    inputSchema: { type: "object", properties: {} },
+  },
+];
+
+function loopbackOrigin() {
+  return `http://127.0.0.1:${env.serverPort}`;
+}
+
+function internalAuthHeaders() {
+  if (!env.authPassword) return {};
+  const token = Buffer.from(`${env.authUser}:${env.authPassword}`, "utf8").toString("base64");
+  return { Authorization: `Basic ${token}` };
+}
+
+async function internalApiJson(method, path, body = undefined) {
+  const headers = {
+    accept: "application/json",
+    ...internalAuthHeaders(),
+    ...(body !== undefined ? { "content-type": "application/json" } : {}),
+  };
+  const r = await fetch(`${loopbackOrigin()}${path}`, {
+    method,
+    headers,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  const text = await r.text();
+  let parsed;
+  try {
+    parsed = text ? JSON.parse(text) : null;
+  } catch {
+    parsed = text;
+  }
+  if (!r.ok) {
+    const msg = typeof parsed === "object" && parsed?.error ? parsed.error : text;
+    throw new Error(`${r.status}: ${String(msg).slice(0, 480)}`);
+  }
+  return parsed;
+}
+
+async function internalCollectTraceSse(runId, maxMs) {
+  const r = await fetch(`${loopbackOrigin()}/api/trace/${encodeURIComponent(runId)}/stream`, {
+    headers: { accept: "text/event-stream", ...internalAuthHeaders() },
+    signal: AbortSignal.timeout(maxMs),
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(`SSE ${r.status}: ${t.slice(0, 300)}`);
+  }
+  const reader = r.body?.getReader();
+  if (!reader) throw new Error("No SSE response body");
+  const decoder = new TextDecoder();
+  const lines = [];
+  let carry = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    carry += decoder.decode(value, { stream: true });
+    const parts = carry.split(/\r?\n/);
+    carry = parts.pop() ?? "";
+    for (const line of parts) lines.push(line);
+  }
+  if (carry) lines.push(carry);
+  return lines.join("\n");
+}
+
+async function dispatchMcpHttpToolCall(params) {
+  const name = params?.name;
+  const args = params?.arguments ?? {};
+  if (name === "trace_address") {
+    const maxWait = Math.min(Math.max(Number(args.maxWaitSeconds) || 900, 30), 3600);
+    const { maxWaitSeconds: _drop, ...traceBody } = args;
+    const started = await internalApiJson("POST", "/api/trace", traceBody);
+    const runId = started?.runId;
+    if (!runId) throw new Error("trace start failed: missing runId");
+    const sseText = await internalCollectTraceSse(runId, maxWait * 1000);
+    return { content: [{ type: "text", text: sseText }] };
+  }
+  if (name === "get_trace_runs") {
+    const data = await internalApiJson("GET", "/api/trace/runs");
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  }
+  if (name === "get_playbook") {
+    const data = await internalApiJson("GET", "/api/playbook");
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  }
+  if (name === "get_reports") {
+    const data = await internalApiJson("GET", "/api/reports");
+    return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+  }
+  throw new Error(`Unknown tool: ${name}`);
+}
+
+function sendJsonRpc(res, obj) {
+  res.statusCode = 200;
+  res.setHeader("content-type", "application/json; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  res.end(JSON.stringify(obj));
+}
+
+async function handleHttpMcp(req, res) {
+  let body;
+  try {
+    body = await readJsonBody(req);
+  } catch {
+    return sendJsonRpc(res, {
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: -32700, message: "Parse error" },
+    });
+  }
+
+  const { jsonrpc, id, method, params } = body;
+  const hasId = Object.prototype.hasOwnProperty.call(body, "id");
+
+  if (method && String(method).startsWith("notifications/") && !hasId) {
+    res.statusCode = 204;
+    return res.end();
+  }
+
+  if (jsonrpc !== "2.0") {
+    return sendJsonRpc(res, {
+      jsonrpc: "2.0",
+      id: id ?? null,
+      error: { code: -32600, message: "Invalid Request" },
+    });
+  }
+
+  try {
+    if (method === "initialize") {
+      return sendJsonRpc(res, {
+        jsonrpc: "2.0",
+        id,
+        result: {
+          protocolVersion: MCP_HTTP_PROTOCOL_VERSION,
+          capabilities: { tools: {} },
+          serverInfo: { name: "sweeper-forensics", version: "1.0.0" },
+        },
+      });
+    }
+    if (method === "ping") {
+      return sendJsonRpc(res, { jsonrpc: "2.0", id, result: {} });
+    }
+    if (method === "tools/list") {
+      return sendJsonRpc(res, { jsonrpc: "2.0", id, result: { tools: MCP_HTTP_TOOLS } });
+    }
+    if (method === "tools/call") {
+      const result = await dispatchMcpHttpToolCall(params ?? {});
+      return sendJsonRpc(res, { jsonrpc: "2.0", id, result });
+    }
+    return sendJsonRpc(res, {
+      jsonrpc: "2.0",
+      id,
+      error: { code: -32601, message: `Method not found: ${method}` },
+    });
+  } catch (err) {
+    return sendJsonRpc(res, {
+      jsonrpc: "2.0",
+      id,
+      error: { code: -32603, message: err?.message ?? String(err) },
+    });
+  }
 }
 
 const server = createServer(async (req, res) => {
@@ -116,6 +327,8 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && p === "/favicon.ico") { res.statusCode = 204; return res.end(); }
 
     if (req.method === "GET" && p === "/api/config") return sendConfig(req, res);
+
+    if (req.method === "POST" && p === "/mcp") return handleHttpMcp(req, res);
 
     if (req.method === "POST" && p === "/api/trace") return startTrace(req, res);
     if (req.method === "GET" && /^\/api\/trace\/[^/]+\/stream$/.test(p)) {

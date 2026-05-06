@@ -50,13 +50,25 @@ Everything binds to `127.0.0.1` by default — private keys entered in the Rescu
 
 ---
 
-## MCP bridge (Cursor, Claude Desktop, other hosts)
+## MCP bridge (HTTP JSON-RPC, stdio MCP, Cursor)
 
-**The deployed app URL (e.g. `*.up.railway.app`) is not an MCP/JSON-RPC endpoint** — it only exposes **REST + SSE** (`/api/trace`, `/api/reports`, …). The **`mcp/`** package is a **stdio** process your tool runs locally; set `SWEEPER_FORENSICS_URL` to that Railway origin. Platforms that only accept a single “remote MCP URL” need either command-based MCP or custom REST tools. Discovery: **`GET /api/config`** includes **`integrations.mcp`**.
+Two ways to integrate:
 
-Use this repo’s **HTTP API from any MCP-capable client** via that stdio server. Point it at a running Sweeper instance (local `npm run ui` or your Railway URL).
+1. **HTTP JSON-RPC** — `POST /mcp` on the app origin (`Content-Type: application/json`; same **HTTP Basic** as the UI when `AUTH_PASSWORD` is set). Methods: `initialize`, `ping`, `tools/list`, `tools/call`. Tools: `trace_address`, `get_trace_runs`, `get_playbook`, `get_reports`. Example: `https://YOUR_HOST/mcp`.
 
-### Install
+2. **stdio MCP** (`mcp/` folder) — your client runs `node mcp/src/server.mjs`; set `SWEEPER_FORENSICS_URL` to the Railway origin (full `forensics_*` tool list in that package).
+
+Discovery: **`GET /api/config`** → `integrations.mcp.httpJsonRpcUrl`.
+
+Quick probe:
+
+```bash
+curl -sS -u 'USER:PASS' -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
+  https://YOUR_HOST/mcp
+```
+
+### stdio MCP — install
 
 ```bash
 cd mcp
@@ -95,9 +107,10 @@ In **Cursor Settings → MCP**, add a server whose command runs Node on this fil
 
 ### Tools (summary)
 
-Registered names are prefixed with `forensics_` (e.g. `forensics_get_config`, `forensics_trace_address`, `forensics_list_written_reports`, `forensics_get_written_report`, `forensics_extend_chain`, …). **Rescue** endpoints are intentionally not exposed through MCP (private keys / different threat model).
+- **HTTP `POST /mcp`:** `trace_address`, `get_trace_runs`, `get_playbook`, `get_reports` (subset aligned with the public trace/report API).
+- **stdio MCP:** names are prefixed with `forensics_` (e.g. `forensics_get_config`, `forensics_trace_address`, `forensics_list_written_reports`, `forensics_get_written_report`, `forensics_extend_chain`, …). **Rescue** endpoints are intentionally not exposed through MCP (private keys / different threat model).
 
-Full tool list, truncation notes, and copy-paste snippets: **[mcp/README.md](mcp/README.md)**.
+Full stdio tool list, truncation notes, and copy-paste snippets: **[mcp/README.md](mcp/README.md)**.
 
 ### Reuse in another repo
 

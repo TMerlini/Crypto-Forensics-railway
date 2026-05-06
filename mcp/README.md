@@ -2,13 +2,23 @@
 
 stdio-based [Model Context Protocol](https://modelcontextprotocol.io) server that proxies tools to your **Sweeper Forensics** HTTP API (`src/server.mjs`). Use it from **Cursor**, **Claude Desktop**, or any MCP host.
 
-## Important: this is not hosted on Railway
+## HTTP JSON-RPC on the same origin
 
-**`https://your-app.up.railway.app` is only REST + SSE** (`/api/trace`, etc.). There is **no** JSON-RPC MCP endpoint on that URL.
+The main app also exposes **`POST /mcp`** (JSON-RPC 2.0, `Content-Type: application/json`). Use the same **HTTP Basic** credentials as the web UI when `AUTH_PASSWORD` is set. Tools: `trace_address`, `get_trace_runs`, `get_playbook`, `get_reports` (see **`GET /api/config`** → `integrations.mcp.httpJsonRpcUrl`). This readme documents the **stdio** bridge and its wider **`forensics_*`** tool surface.
 
-The MCP server is a **separate local process**: your host (e.g. Cursor) runs `node mcp/src/server.mjs`, which speaks MCP on **stdin/stdout** and calls the Railway app over **HTTP** using `SWEEPER_FORENSICS_URL`.
+Example:
 
-If another product only supports "paste an MCP server URL", you must either use **custom HTTP tools** that call the same REST routes, or use a host that supports **stdio/command-based** MCP. You can confirm integration shape with **`GET /api/config`** → `integrations.mcp`.
+```bash
+curl -sS -u 'USER:PASS' -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
+  https://YOUR_HOST/mcp
+```
+
+## stdio MCP vs hosted URL
+
+**`https://your-app.up.railway.app`** serves the **web UI**, **REST + SSE** (`/api/trace`, etc.), and **`POST /mcp`**. For **stdio** MCP, your host (e.g. Cursor) runs `node mcp/src/server.mjs`, which speaks MCP on **stdin/stdout** and calls the app over **HTTP** using `SWEEPER_FORENSICS_URL`.
+
+If a product only supports "paste an MCP server URL", point it at **`https://…/mcp`** with Basic auth when available; otherwise use command-based stdio MCP or custom REST tools. Integration shape: **`GET /api/config`** → `integrations.mcp`.
 
 ## Requirements
 
@@ -69,6 +79,17 @@ For Railway (with Basic auth):
 Restart Cursor after edits.
 
 ## Tools exposed
+
+### HTTP `POST /mcp` (JSON-RPC)
+
+| Tool | Maps to |
+|------|---------|
+| `trace_address` | `POST /api/trace` then buffers full `GET /api/trace/:id/stream` (SSE) into one text result |
+| `get_trace_runs` | `GET /api/trace/runs` |
+| `get_playbook` | `GET /api/playbook` |
+| `get_reports` | `GET /api/reports` |
+
+### stdio (`forensics_*`)
 
 | Tool | Maps to |
 |------|---------|
