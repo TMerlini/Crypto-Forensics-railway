@@ -5,7 +5,7 @@
 // Routes:
 //   GET  /                       → static UI (web/index.html)
 //   GET  /static/*               → web/ assets (css, js)
-//   GET  /api/config             → non-secret config (chainId, default address, etc.)
+//   GET  /api/config             → non-secret config + integrations hint (MCP uses stdio, not HTTP on this origin)
 //   POST /api/trace              → start a trace (returns runId)
 //   GET  /api/trace/:id/stream   → SSE progress stream + final report
 //   GET  /api/trace/runs         → list past trace runs (scans out/)
@@ -59,6 +59,38 @@ const MIME = {
   ".png": "image/png",
 };
 
+function publicApiOrigin(req) {
+  const rawProto = req.headers["x-forwarded-proto"];
+  const proto = (Array.isArray(rawProto) ? rawProto[0] : rawProto)?.split(",")[0]?.trim() || "http";
+  const host = (req.headers.host ?? "").split(",")[0].trim();
+  if (!host) return null;
+  return `${proto}://${host}`;
+}
+
+function sendConfig(req, res) {
+  const origin = publicApiOrigin(req);
+  return sendJson(res, {
+    chainId: env.chainId,
+    defaultScamAddress: env.scamAddress || null,
+    defaultDirection: env.direction,
+    defaultMaxDepth: env.maxDepth,
+    defaultMaxAddresses: env.maxAddresses,
+    builderCountMainnet: buildersForChain(1).length,
+    builderCountSepolia: buildersForChain(11155111).length,
+    chains: CHAINS,
+    integrations: {
+      mcp: {
+        transport: "stdio",
+        description:
+          "This deployment exposes REST + SSE only. MCP is not served as JSON-RPC over HTTP on this URL. " +
+          "Run the stdio MCP from the repo's mcp/ package with SWEEPER_FORENSICS_URL set to this origin (see integrations.mcp.sweeperForensicsUrl).",
+        sweeperForensicsUrl: origin,
+        repositoryPath: "mcp/",
+      },
+    },
+  });
+}
+
 const server = createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
@@ -83,19 +115,7 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && p.startsWith("/static/")) return sendFile(res, join(webDir, p.slice("/static/".length)));
     if (req.method === "GET" && p === "/favicon.ico") { res.statusCode = 204; return res.end(); }
 
-    if (req.method === "GET" && p === "/api/config") return sendJson(res, {
-      chainId: env.chainId,
-      defaultScamAddress: env.scamAddress || null,
-      defaultDirection: env.direction,
-      defaultMaxDepth: env.maxDepth,
-      defaultMaxAddresses: env.maxAddresses,
-      builderCountMainnet: buildersForChain(1).length,
-      builderCountSepolia: buildersForChain(11155111).length,
-      // Map of chains the UI dropdown should label/disable. Lets the client
-      // tell users which chains require an Etherscan paid plan upfront,
-      // before they hit "Start trace" and waste an API call.
-      chains: CHAINS,
-    });
+    if (req.method === "GET" && p === "/api/config") return sendConfig(req, res);
 
     if (req.method === "POST" && p === "/api/trace") return startTrace(req, res);
     if (req.method === "GET" && /^\/api\/trace\/[^/]+\/stream$/.test(p)) {

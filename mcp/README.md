@@ -2,6 +2,14 @@
 
 stdio-based [Model Context Protocol](https://modelcontextprotocol.io) server that proxies tools to your **Sweeper Forensics** HTTP API (`src/server.mjs`). Use it from **Cursor**, **Claude Desktop**, or any MCP host.
 
+## Important: this is not hosted on Railway
+
+**`https://your-app.up.railway.app` is only REST + SSE** (`/api/trace`, etc.). There is **no** JSON-RPC MCP endpoint on that URL.
+
+The MCP server is a **separate local process**: your host (e.g. Cursor) runs `node mcp/src/server.mjs`, which speaks MCP on **stdin/stdout** and calls the Railway app over **HTTP** using `SWEEPER_FORENSICS_URL`.
+
+If another product only supports "paste an MCP server URL", you must either use **custom HTTP tools** that call the same REST routes, or use a host that supports **stdio/command-based** MCP. You can confirm integration shape with **`GET /api/config`** → `integrations.mcp`.
+
 ## Requirements
 
 - Node **20+**

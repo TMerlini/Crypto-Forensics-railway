@@ -52,7 +52,9 @@ Everything binds to `127.0.0.1` by default — private keys entered in the Rescu
 
 ## MCP bridge (Cursor, Claude Desktop, other hosts)
 
-Use this repo’s **HTTP API from any MCP-capable client** via a small stdio server in **`mcp/`**. Point it at a running Sweeper instance (local `npm run ui` or your Railway URL).
+**The deployed app URL (e.g. `*.up.railway.app`) is not an MCP/JSON-RPC endpoint** — it only exposes **REST + SSE** (`/api/trace`, `/api/reports`, …). The **`mcp/`** package is a **stdio** process your tool runs locally; set `SWEEPER_FORENSICS_URL` to that Railway origin. Platforms that only accept a single “remote MCP URL” need either command-based MCP or custom REST tools. Discovery: **`GET /api/config`** includes **`integrations.mcp`**.
+
+Use this repo’s **HTTP API from any MCP-capable client** via that stdio server. Point it at a running Sweeper instance (local `npm run ui` or your Railway URL).
 
 ### Install
 
