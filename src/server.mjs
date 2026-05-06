@@ -8,6 +8,7 @@
 //   GET  /api/config             → non-secret config + integrations (stdio + HTTP MCP)
 //   POST /mcp                    → JSON-RPC 2.0 (HTTP MCP: initialize, ping, tools/list, tools/call)
 //   POST /api/trace              → start a trace (returns runId)
+//   GET  /api/trace/:id/status  → run state: running | complete | error | not_found (in-memory UUID runs; poll for async)
 //   GET  /api/trace/:id/stream   → SSE progress stream + final report
 //   GET  /api/trace/runs         → list past trace runs (scans out/)
 //   GET  /api/trace/runs/:id     → fetch a run's full JSON report
@@ -127,6 +128,39 @@ const MCP_HTTP_TOOLS = [
     },
   },
   {
+    name: "start_trace",
+    description:
+      "POST /api/trace only; returns runId immediately. Poll get_trace_result(runId). Same body fields as trace_address except maxWaitSeconds.",
+    inputSchema: {
+      type: "object",
+      required: ["scamAddress"],
+      properties: {
+        scamAddress: { type: "string", description: "0x-prefixed 40 hex address" },
+        chainId: { type: "integer" },
+        direction: { type: "string", enum: ["in", "out", "both"] },
+        maxDepth: { type: "integer", minimum: 1, maximum: 50 },
+        maxAddresses: { type: "integer", minimum: 1, maximum: 50000 },
+        rps: { type: "number", minimum: 0.5, maximum: 30 },
+        adaptiveRps: { type: "boolean" },
+        stopAtOrigin: { type: "boolean" },
+        apiKey: { type: "string" },
+        acknowledgedPaidTier: { type: "boolean" },
+      },
+    },
+  },
+  {
+    name: "get_trace_result",
+    description:
+      "GET /api/trace/:runId/status for in-memory runs; if not_found, tries GET /api/trace/runs/:id (disk history).",
+    inputSchema: {
+      type: "object",
+      required: ["runId"],
+      properties: {
+        runId: { type: "string", description: "UUID from start_trace or POST /api/trace" },
+      },
+    },
+  },
+  {
     name: "get_trace_runs",
     description: "GET /api/trace/runs — list saved runs from disk (empty on hosted / DISABLE_DISK).",
     inputSchema: { type: "object", properties: {} },
@@ -215,6 +249,51 @@ async function dispatchMcpHttpToolCall(params) {
     if (!runId) throw new Error("trace start failed: missing runId");
     const sseText = await internalCollectTraceSse(runId, maxWait * 1000);
     return { content: [{ type: "text", text: sseText }] };
+  }
+  if (name === "start_trace") {
+    const started = await internalApiJson("POST", "/api/trace", args);
+    const runId = started?.runId;
+    if (!runId) throw new Error("trace start failed: missing runId");
+    const payload = {
+      runId,
+      message: "Trace started, ~10-15 min. Call get_trace_result(runId) when ready.",
+    };
+    return { content: [{ type: "text", text: JSON.stringify(payload, null, 2) }] };
+  }
+  if (name === "get_trace_result") {
+    const runId = String(args.runId ?? "").trim();
+    if (!runId) throw new Error("runId is required");
+    const st = await internalApiJson("GET", `/api/trace/${encodeURIComponent(runId)}/status`);
+    if (st?.status !== "not_found") {
+      return { content: [{ type: "text", text: JSON.stringify(st, null, 2) }] };
+    }
+    const runsList = await internalApiJson("GET", "/api/trace/runs");
+    const inHistory = Array.isArray(runsList) && runsList.some((r) => r.id === runId);
+    let disk = null;
+    if (inHistory) {
+      try {
+        disk = await internalApiJson("GET", `/api/trace/runs/${encodeURIComponent(runId)}`);
+      } catch {
+        disk = null;
+      }
+    } else {
+      try {
+        disk = await internalApiJson("GET", `/api/trace/runs/${encodeURIComponent(runId)}`);
+      } catch {
+        /* no file */
+      }
+    }
+    if (disk && typeof disk === "object" && disk.error == null && disk.target != null) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({ status: "complete", runId, source: "disk", ...disk }, null, 2),
+          },
+        ],
+      };
+    }
+    return { content: [{ type: "text", text: JSON.stringify({ status: "not_found", runId }, null, 2) }] };
   }
   if (name === "get_trace_runs") {
     const data = await internalApiJson("GET", "/api/trace/runs");
@@ -331,6 +410,10 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && p === "/mcp") return handleHttpMcp(req, res);
 
     if (req.method === "POST" && p === "/api/trace") return startTrace(req, res);
+    if (req.method === "GET" && /^\/api\/trace\/[^/]+\/status$/.test(p)) {
+      const id = p.split("/")[3];
+      return traceRunStatus(id, res);
+    }
     if (req.method === "GET" && /^\/api\/trace\/[^/]+\/stream$/.test(p)) {
       const id = p.split("/")[3];
       return streamTrace(id, res);
@@ -446,6 +529,7 @@ async function startTrace(req, res) {
       // everything via the SSE `report-ready` event below.
       if (!env.disableDisk) await writeReports({ state: run.state, env: envCtx, outDir });
       const analysis = analyze(run.state, params.scamAddress, params.direction);
+      run.analysis = analysis;
       emitProgress(run, { type: "report-ready", analysis, runId: id });
       run.done = true;
       emitProgress(run, { type: "close" });
@@ -463,6 +547,28 @@ async function startTrace(req, res) {
 function emitProgress(run, ev) {
   run.progress.push(ev);
   for (const res of run.subscribers) writeSse(res, ev);
+}
+
+function traceRunStatus(id, res) {
+  const run = runs.get(id);
+  if (!run) return sendJson(res, { status: "not_found", runId: id });
+  if (!run.done) {
+    return sendJson(res, { status: "running", runId: id, startedAt: run.startedAt });
+  }
+  if (run.error) {
+    return sendJson(res, { status: "error", runId: id, error: run.error });
+  }
+  const analysis = run.analysis ?? analyze(run.state, run.params.scamAddress, run.params.direction);
+  return sendJson(res, {
+    status: "complete",
+    runId: id,
+    target: run.params.scamAddress,
+    chainId: run.params.chainId,
+    direction: run.params.direction,
+    analysis,
+    nodes: run.state.nodes,
+    edges: run.state.edges,
+  });
 }
 
 function streamTrace(id, res) {

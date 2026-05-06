@@ -4,7 +4,7 @@ stdio-based [Model Context Protocol](https://modelcontextprotocol.io) server tha
 
 ## HTTP JSON-RPC on the same origin
 
-The main app also exposes **`POST /mcp`** (JSON-RPC 2.0, `Content-Type: application/json`). Use the same **HTTP Basic** credentials as the web UI when `AUTH_PASSWORD` is set. Tools: `trace_address`, `get_trace_runs`, `get_playbook`, `get_reports` (see **`GET /api/config`** → `integrations.mcp.httpJsonRpcUrl`). This readme documents the **stdio** bridge and its wider **`forensics_*`** tool surface.
+The main app also exposes **`POST /mcp`** (JSON-RPC 2.0, `Content-Type: application/json`). Use the same **HTTP Basic** credentials as the web UI when `AUTH_PASSWORD` is set. Tools: `trace_address`, `start_trace`, `get_trace_result`, `get_trace_runs`, `get_playbook`, `get_reports` (see **`GET /api/config`** → `integrations.mcp.httpJsonRpcUrl`). This readme documents the **stdio** bridge and its wider **`forensics_*`** tool surface.
 
 Example:
 
@@ -85,6 +85,8 @@ Restart Cursor after edits.
 | Tool | Maps to |
 |------|---------|
 | `trace_address` | `POST /api/trace` then buffers full `GET /api/trace/:id/stream` (SSE) into one text result |
+| `start_trace` | `POST /api/trace` only; returns `runId` immediately |
+| `get_trace_result` | `GET /api/trace/:id/status` (in-memory); if `not_found`, uses `GET /api/trace/runs` + `GET /api/trace/runs/:id` for disk history |
 | `get_trace_runs` | `GET /api/trace/runs` |
 | `get_playbook` | `GET /api/playbook` |
 | `get_reports` | `GET /api/reports` |

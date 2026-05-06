@@ -54,7 +54,7 @@ Everything binds to `127.0.0.1` by default — private keys entered in the Rescu
 
 Two ways to integrate:
 
-1. **HTTP JSON-RPC** — `POST /mcp` on the app origin (`Content-Type: application/json`; same **HTTP Basic** as the UI when `AUTH_PASSWORD` is set). Methods: `initialize`, `ping`, `tools/list`, `tools/call`. Tools: `trace_address`, `get_trace_runs`, `get_playbook`, `get_reports`. Example: `https://YOUR_HOST/mcp`.
+1. **HTTP JSON-RPC** — `POST /mcp` on the app origin (`Content-Type: application/json`; same **HTTP Basic** as the UI when `AUTH_PASSWORD` is set). Methods: `initialize`, `ping`, `tools/list`, `tools/call`. Tools: `trace_address`, `start_trace`, `get_trace_result`, `get_trace_runs`, `get_playbook`, `get_reports`. Example: `https://YOUR_HOST/mcp`.
 
 2. **stdio MCP** (`mcp/` folder) — your client runs `node mcp/src/server.mjs`; set `SWEEPER_FORENSICS_URL` to the Railway origin (full `forensics_*` tool list in that package).
 
@@ -107,7 +107,7 @@ In **Cursor Settings → MCP**, add a server whose command runs Node on this fil
 
 ### Tools (summary)
 
-- **HTTP `POST /mcp`:** `trace_address`, `get_trace_runs`, `get_playbook`, `get_reports` (subset aligned with the public trace/report API).
+- **HTTP `POST /mcp`:** `trace_address` (blocking SSE), `start_trace` + `get_trace_result` (async poll), `get_trace_runs`, `get_playbook`, `get_reports`. REST helper: `GET /api/trace/:id/status`.
 - **stdio MCP:** names are prefixed with `forensics_` (e.g. `forensics_get_config`, `forensics_trace_address`, `forensics_list_written_reports`, `forensics_get_written_report`, `forensics_extend_chain`, …). **Rescue** endpoints are intentionally not exposed through MCP (private keys / different threat model).
 
 Full stdio tool list, truncation notes, and copy-paste snippets: **[mcp/README.md](mcp/README.md)**.
